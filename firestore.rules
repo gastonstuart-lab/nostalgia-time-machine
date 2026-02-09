@@ -1,0 +1,152 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function: Check if requester is a member of a group
+    function isMember(groupId) {
+      return request.auth != null && 
+             exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+    }
+
+    // ============================================================================
+    // USERS
+    // ============================================================================
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ============================================================================
+    // GROUPS
+    // ============================================================================
+    match /groups/{groupId} {
+      // Allow read if requester is a member
+      allow read: if isMember(groupId);
+      
+      // Allow create if authenticated (member doc created right after)
+      allow create: if request.auth != null;
+      
+      // Allow update if requester is a member
+      allow update: if isMember(groupId);
+      
+      // Allow delete if requester is a member (optional, can restrict further)
+      allow delete: if isMember(groupId);
+
+      // ============================================================================
+      // MEMBERS
+      // ============================================================================
+      match /members/{uid} {
+        // Allow read if requester is a member of this group
+        allow read: if isMember(groupId);
+        
+        // Allow create/update/delete only own member doc
+        allow create, update, delete: if request.auth != null && request.auth.uid == uid;
+      }
+
+      // ============================================================================
+      // WEEKS
+      // ============================================================================
+      match /weeks/{weekId} {
+        // Allow read if requester is a member
+        allow read: if isMember(groupId);
+        
+        // Allow create if requester is a member
+        allow create: if isMember(groupId);
+        
+        // Allow update if requester is a member (for advanceYear transaction)
+        allow update: if isMember(groupId);
+        
+        // Disallow delete (weeks shouldn't be deleted)
+        allow delete: if false;
+
+        // ============================================================================
+        // SONGS
+        // ============================================================================
+        match /songs/{songId} {
+          // Allow read if requester is a member
+          allow read: if isMember(groupId);
+          
+          // Allow create if requester is a member
+          allow create: if isMember(groupId);
+          
+          // Allow update/delete only if requester is the owner
+          allow update, delete: if request.auth != null && 
+                                   resource.data.addedByUid == request.auth.uid;
+
+          // ============================================================================
+          // REACTIONS
+          // ============================================================================
+          match /reactions/{reactionUid} {
+            // Allow read if requester is a member
+            allow read: if isMember(groupId);
+            
+            // Allow write only own reaction doc
+            allow write: if request.auth != null && request.auth.uid == reactionUid;
+          }
+        }
+
+        // ============================================================================
+        // EPISODES
+        // ============================================================================
+        match /episodes/{episodeId} {
+          // Allow read if requester is a member
+          allow read: if isMember(groupId);
+          
+          // Allow create if requester is a member
+          allow create: if isMember(groupId);
+          
+          // Allow update/delete only if requester is the owner
+          allow update, delete: if request.auth != null && 
+                                   resource.data.addedByUid == request.auth.uid;
+        }
+      }
+
+      // ============================================================================
+      // CHAT SESSIONS (AI Assistant)
+      // ============================================================================
+      match /chatSessions/{sessionId} {
+        // Allow read/write if requester is a member
+        allow read, write: if isMember(groupId);
+
+        // ============================================================================
+        // CHAT MESSAGES
+        // ============================================================================
+        match /messages/{messageId} {
+          // Allow read if requester is a member
+          allow read: if isMember(groupId);
+          
+          // Allow create if requester is a member
+          allow create: if isMember(groupId) && 
+                           // If senderType is 'user', require userUid == request.auth.uid
+                           (request.resource.data.senderType != 'user' || 
+                            request.resource.data.userUid == request.auth.uid);
+          
+          // Disallow update/delete of messages (append-only)
+          allow update, delete: if false;
+        }
+      }
+
+      // ============================================================================
+      // MESSAGE BOARD (Group Chat)
+      // ============================================================================
+      match /messageBoard/messages {
+        // Allow read if requester is a member
+        allow read: if isMember(groupId);
+        
+        // Allow write if requester is a member (for creating message doc)
+        allow write: if isMember(groupId);
+
+        match /messages/{messageId} {
+          // Allow read if requester is a member
+          allow read: if isMember(groupId);
+          
+          // Allow create if requester is a member and senderUid matches
+          allow create: if isMember(groupId) && 
+                           request.resource.data.senderUid == request.auth.uid;
+          
+          // Disallow update/delete (append-only)
+          allow update, delete: if false;
+        }
+      }
+    }
+  }
+}
