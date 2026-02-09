@@ -23,6 +23,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
   bool _yearlyRecap = true;
   bool _isGeneratingCode = false;
   bool _isLeavingGroup = false;
+  bool _isStartingNewMachine = false;
 
   int? _songCap;
   int? _episodeCap;
@@ -173,6 +174,44 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
         );
         setState(() => _isLeavingGroup = false);
       }
+    }
+  }
+
+  Future<void> _startNewTimeMachine() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Start a New Time Machine?'),
+        content: const Text(
+            'This will leave your current crew and create a new one.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isStartingNewMachine = true);
+    try {
+      final provider = context.read<NostalgiaProvider>();
+      await provider.leaveGroup();
+      if (mounted) {
+        context.go(AppRoutes.joinCreate);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to start new time machine: $e')),
+      );
+      setState(() => _isStartingNewMachine = false);
     }
   }
 
@@ -693,6 +732,23 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                                 fontWeight: FontWeight.w800,
                                 color: Theme.of(context).colorScheme.error)),
                     const SizedBox(height: AppTheme.spacingMd),
+                    OutlinedButton.icon(
+                      onPressed: _isStartingNewMachine ? null : _startNewTimeMachine,
+                      icon: _isStartingNewMachine
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.restart_alt_rounded),
+                      label: const Text("Start New Time Machine"),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.error,
+                        side: BorderSide(
+                            color: Theme.of(context).colorScheme.error),
+                      ),
+                    ),
+                    const SizedBox(height: AppTheme.spacingSm),
                     OutlinedButton.icon(
                       onPressed: _isLeavingGroup ? null : _leaveGroup,
                       icon: _isLeavingGroup

@@ -83,25 +83,13 @@ class ChatService {
         debugPrint('✅ AI response saved to Firestore');
       } catch (e, stack) {
         // TEMP DIAGNOSTIC
-        String code = 'unknown';
         if (e is FirebaseFunctionsException) {
-          code = e.code;
           debugPrint('[CFN ERROR] nostalgiaChat: FirebaseFunctionsException code=${e.code}, message=${e.message}, details=${e.details}');
         } else {
           debugPrint('[CFN ERROR] nostalgiaChat: ${e.runtimeType}: $e');
         }
         debugPrint('[CFN ERROR] nostalgiaChat stack: $stack');
-        // Show a short SnackBar/toast with the code (must be surfaced in UI layer)
-        // ignore: use_build_context_synchronously
-        // ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('nostalgiaChat error: $code')));
-        // Write error message
-        await _firestoreService.addChatMessage(
-          groupId: groupId,
-          sessionId: sessionId,
-          text: 'Assistant error: $code',
-          senderType: 'assistant',
-          status: 'error',
-        );
+        rethrow;
       }
     } catch (e) {
       debugPrint('❌ Failed to process user message: $e');

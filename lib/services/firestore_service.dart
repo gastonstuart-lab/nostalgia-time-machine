@@ -77,6 +77,8 @@ class FirestoreService {
         createdAt: DateTime.now(),
         createdByUid: createdByUid,
         currentYear: startDecade,
+        startYear: startDecade,
+        weekIndex: 1,
         currentDecadeStart: startDecade,
         currentWeekStart: DateTime.now(),
         status: 'active',
@@ -88,16 +90,19 @@ class FirestoreService {
           'quizDifficulty': quizDifficulty,
         },
       );
-      // Use merge to preserve older fields
-      await groupRef.set(group.toJson(), SetOptions(merge: true));
-
-      // Create initial week document
-      await groupRef.collection('weeks').doc(weekId).set({
+      final batch = _db.batch();
+      batch.set(groupRef, {
+        ...group.toJson(),
+        'createdAt': FieldValue.serverTimestamp(),
+        'currentWeekStart': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      batch.set(groupRef.collection('weeks').doc(weekId), {
         'year': startDecade,
         'weekStart': FieldValue.serverTimestamp(),
         'weekEnd': null,
         'isClosed': false,
       });
+      await batch.commit();
 
       debugPrint('✅ Group created: ${group.id} with code: $code');
       return group;
@@ -176,6 +181,10 @@ class FirestoreService {
           .doc(uid)
           .set(member.toJson());
 
+      await _db.collection('users').doc(uid).set({
+        'groupId': groupId,
+      }, SetOptions(merge: true));
+
       debugPrint('✅ Member added to group: $groupId');
     } catch (e) {
       debugPrint('❌ Failed to add member: $e');
@@ -196,20 +205,13 @@ class FirestoreService {
 
   Future<String?> getUserGroupId(String uid) async {
     try {
-      // Query all groups to find where this user is a member
-      final groupsSnapshot = await _db.collection('groups').get();
-
-      for (final groupDoc in groupsSnapshot.docs) {
-        final memberDoc =
-            await groupDoc.reference.collection('members').doc(uid).get();
-
-        if (memberDoc.exists) {
-          debugPrint('✅ Found user in group: ${groupDoc.id}');
-          return groupDoc.id;
-        }
+      final userDoc = await _db.collection('users').doc(uid).get();
+      final groupId = userDoc.data()?['groupId'] as String?;
+      if (groupId != null && groupId.isNotEmpty) {
+        debugPrint('✅ Found user groupId from profile: $groupId');
+        return groupId;
       }
-
-      debugPrint('ℹ️ User not in any group');
+      debugPrint('ℹ️ No groupId on user profile');
       return null;
     } catch (e) {
       debugPrint('❌ Failed to get user group: $e');
@@ -228,6 +230,10 @@ class FirestoreService {
           .collection('members')
           .doc(uid)
           .delete();
+
+      await _db.collection('users').doc(uid).set({
+        'groupId': FieldValue.delete(),
+      }, SetOptions(merge: true));
 
       debugPrint('✅ Member removed from group: $groupId');
     } catch (e) {
@@ -729,11 +735,16 @@ class FirestoreService {
 
       final groupData = groupDoc.data()!;
       final currentYear = (groupData['currentYear'] as num?)?.toInt() ?? 1990;
+      final startYear = (groupData['startYear'] as num?)?.toInt() ?? currentYear;
+      final currentWeekIndex = ((groupData['weekIndex'] as num?)?.toInt() ??
+              (currentYear - startYear + 1))
+          .clamp(1, 9999);
       final currentDecadeStart =
           (groupData['currentDecadeStart'] as num?)?.toInt() ?? 1990;
       final oldWeekId = groupData['currentWeekId'] as String?;
 
-      final nextYear = currentYear + 1;
+      final nextWeekIndex = currentWeekIndex + 1;
+      final nextYear = startYear + (nextWeekIndex - 1);
       final newWeekId = 'week_$nextYear';
       final isDecadeRollover = nextYear > currentDecadeStart + 9;
       final newDecadeStart =
@@ -750,6 +761,8 @@ class FirestoreService {
 
         transaction.update(groupRef, {
           'currentYear': nextYear,
+          'startYear': startYear,
+          'weekIndex': nextWeekIndex,
           'currentDecadeStart': newDecadeStart,
           'currentWeekId': newWeekId,
           'currentWeekStart': FieldValue.serverTimestamp(),
@@ -1082,14 +1095,119 @@ class FirestoreService {
   // WEEKLY QUIZ
   // ============================================================================
 
+  DocumentReference<Map<String, dynamic>> _quizDefinitionRef(
+    String groupId,
+    String weekId,
+  ) {
+    return _db
+        .collection('groups')
+        .doc(groupId)
+        .collection('weeks')
+        .doc(weekId)
+        .collection('quiz')
+        .doc('definition');
+  }
+
+  Future<Map<String, dynamic>?> getQuizDefinition(
+      String groupId, String weekId) async {
+    final definitionDoc = await _quizDefinitionRef(groupId, weekId).get();
+    if (definitionDoc.exists && definitionDoc.data() != null) {
+      return definitionDoc.data();
+    }
+
+    // Backward compatibility for older docs at quiz/quiz.
+    final legacyDoc = await _db
+        .collection('groups')
+        .doc(groupId)
+        .collection('weeks')
+        .doc(weekId)
+        .collection('quiz')
+        .doc('quiz')
+        .get();
+    if (!legacyDoc.exists || legacyDoc.data() == null) return null;
+    final legacyData = legacyDoc.data()!;
+    final legacyQuestions = legacyData['questions'] as List<dynamic>?;
+    final legacyYear = (legacyData['year'] as num?)?.toInt();
+    if (legacyQuestions == null ||
+        legacyQuestions.isEmpty ||
+        legacyYear == null) {
+      return null;
+    }
+    return {
+      'year': legacyYear,
+      'difficulty': legacyData['difficulty'] ?? 'medium',
+      'questions': legacyQuestions,
+      'createdAt': legacyData['createdAt'],
+    };
+  }
+
+  Future<void> createQuizDefinitionIfMissing(
+    String groupId,
+    String weekId,
+    Map<String, dynamic> definitionMap,
+  ) async {
+    final ref = _quizDefinitionRef(groupId, weekId);
+    await _db.runTransaction((transaction) async {
+      final existing = await transaction.get(ref);
+      if (existing.exists) return;
+      transaction.set(ref, definitionMap);
+    });
+  }
+
+  Future<void> deleteQuizDefinition(String groupId, String weekId) async {
+    await _quizDefinitionRef(groupId, weekId).delete();
+  }
+
   Future<List<QuizQuestion>> fetchWeeklyQuiz(
     String groupId,
     String weekId, {
+    required int year,
+    String difficulty = 'medium',
     bool forceRegenerate = false,
   }) async {
     try {
-      final year = int.tryParse(weekId.replaceFirst('week_', '')) ?? 1990;
+      final expectedWeekId = 'week_$year';
+      if (weekId != expectedWeekId) {
+        debugPrint(
+            '[QUIZ] Week/year mismatch detected. weekId=$weekId expected=$expectedWeekId year=$year');
+      }
+      final existingDefinition = await getQuizDefinition(groupId, weekId);
+      final existingQuestions =
+          existingDefinition?['questions'] as List<dynamic>?;
+      final existingYear = (existingDefinition?['year'] as num?)?.toInt();
+      final strictExistingQuestions = existingQuestions
+              ?.whereType<Map>()
+              .map((q) => Map<String, dynamic>.from(q))
+              .where((q) {
+                final qYear = (q['year'] as num?)?.toInt();
+                final options = ((q['choices'] as List?) ?? (q['options'] as List?))
+                    ?.map((o) => '$o')
+                    .toList();
+                if (qYear != year || options == null || options.length != 4) return false;
+                final prefixes = options
+                    .map((o) => RegExp(r'^(.+)\s+[A-D]$').firstMatch(o.trim())?.group(1))
+                    .whereType<String>()
+                    .map((s) => s.toLowerCase())
+                    .toList();
+                final hasPlaceholderOptions =
+                    prefixes.length == 4 && prefixes.toSet().length == 1;
+                return !hasPlaceholderOptions;
+              })
+              .map((q) => QuizQuestion.fromJson(q))
+              .toList() ??
+          <QuizQuestion>[];
+      final loadedFromDefinition = !forceRegenerate &&
+          existingYear == year &&
+          strictExistingQuestions.length == 20;
+
+      if (loadedFromDefinition) {
+        debugPrint(
+            '[QUIZ] source=definition year=$year weekId=$weekId groupId=$groupId');
+        return strictExistingQuestions;
+      }
+
       Object? functionError;
+      List<dynamic>? rawFromFunction;
       // Use Cloud Function as source of truth
       try {
         final callable = _functions.httpsCallable('generateWeeklyQuiz');
@@ -1097,17 +1215,14 @@ class FirestoreService {
           'groupId': groupId,
           'weekId': weekId,
           'year': year,
+          'difficulty': difficulty,
+          'yearOnlyPrompt':
+              'Generate 20 music questions strictly from the year $year. No other years.',
           'forceRegenerate': forceRegenerate,
         });
 
         final payload = result.data as Map<dynamic, dynamic>?;
-        final rawFromFunction = payload?['questions'] as List<dynamic>?;
-        if (rawFromFunction != null && rawFromFunction.isNotEmpty) {
-          return rawFromFunction
-              .whereType<Map>()
-              .map((q) => QuizQuestion.fromJson(Map<String, dynamic>.from(q)))
-              .toList();
-        }
+        rawFromFunction = payload?['questions'] as List<dynamic>?;
       } catch (e, stack) {
         functionError = e;
         if (e is FirebaseFunctionsException) {
@@ -1119,22 +1234,23 @@ class FirestoreService {
         debugPrint('[CFN ERROR] generateWeeklyQuiz stack: $stack');
       }
 
-      final quizRef = _db
-          .collection('groups')
-          .doc(groupId)
-          .collection('weeks')
-          .doc(weekId)
-          .collection('quiz')
-          .doc('quiz');
-      final quizDoc = await quizRef.get();
-      final rawQuestions = quizDoc.data()?['questions'] as List<dynamic>?;
+      if (rawFromFunction != null && rawFromFunction.isNotEmpty) {
+        debugPrint(
+            '[QUIZ] Cloud Function returned questions; reading canonical definition from Firestore.');
+      }
 
-      if (rawQuestions == null || rawQuestions.isEmpty) {
+      final storedDefinition = await getQuizDefinition(groupId, weekId);
+      final rawQuestions = storedDefinition?['questions'] as List<dynamic>?;
+      final storedYear = (storedDefinition?['year'] as num?)?.toInt();
+
+      if (rawQuestions == null || rawQuestions.isEmpty || storedYear != year) {
         if (functionError != null) {
           throw functionError;
         }
         throw Exception('QUIZ_NOT_AVAILABLE');
       }
+      debugPrint(
+          '[QUIZ] source=generated year=$year weekId=$weekId groupId=$groupId');
 
       return rawQuestions
           .whereType<Map>()

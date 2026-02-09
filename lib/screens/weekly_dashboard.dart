@@ -142,9 +142,21 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
     final episodes = provider.episodes;
     final weekId = provider.currentWeekId;
 
-    if (group == null || userProfile == null) {
+    if (provider.isCheckingAuth ||
+        group == null ||
+        userProfile == null ||
+        weekId == null) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: AppTheme.spacingSm),
+              Text('Loading your time machine...'),
+            ],
+          ),
+        ),
       );
     }
 
@@ -153,6 +165,8 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
         songs.where((s) => s.addedByUid == userProfile.uid).length;
     final userTV = episodes.any((e) => e.addedByUid == userProfile.uid);
     final songCap = group.songCapPerUser;
+    final int? currentYear = group.currentYear > 0 ? group.currentYear : null;
+    final int? weekNumber = group.weekIndex > 0 ? group.weekIndex : null;
 
     return Scaffold(
       body: SafeArea(
@@ -218,7 +232,7 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                                 ),
                           ),
                           Text(
-                            "${group.currentYear}",
+                            currentYear?.toString() ?? "Loading...",
                             style: Theme.of(context)
                                 .textTheme
                                 .headlineLarge
@@ -229,7 +243,9 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                                 ),
                           ),
                           Text(
-                            "WEEK 5", // Mock week
+                            currentYear == null || weekNumber == null
+                                ? "Loading..."
+                                : "WEEK $weekNumber",
                             style: Theme.of(context)
                                 .textTheme
                                 .labelMedium
@@ -264,6 +280,14 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                             borderRadius: BorderRadius.circular(2))),
                   ),
                 ],
+              ),
+              const SizedBox(height: AppTheme.spacingLg),
+
+              _MagicActionsSection(
+                year: group.currentYear,
+                onHistory: () => context.push('/history'),
+                onPlaylist: () => context.push('/playlist'),
+                onAssistant: () => context.push('/assistant'),
               ),
               const SizedBox(height: AppTheme.spacingLg),
 
@@ -492,25 +516,23 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
 
               const SizedBox(height: AppTheme.spacingMd),
 
-              if (weekId != null) ...[
-                _WeeklyQuizCard(
-                  groupId: group.id,
-                  weekId: weekId,
-                  userId: userProfile.uid,
-                ),
-                const SizedBox(height: AppTheme.spacingMd),
-                _DecadeLeaderboardCard(
-                  groupId: group.id,
-                  decadeStart: group.currentDecadeStart,
-                ),
-                const SizedBox(height: AppTheme.spacingMd),
-                _WeeklyMovieCard(
-                  groupId: group.id,
-                  weekId: weekId,
-                  userId: userProfile.uid,
-                ),
-                const SizedBox(height: AppTheme.spacingMd),
-              ],
+              _WeeklyQuizCard(
+                groupId: group.id,
+                weekId: weekId,
+                userId: userProfile.uid,
+              ),
+              const SizedBox(height: AppTheme.spacingMd),
+              _DecadeLeaderboardCard(
+                groupId: group.id,
+                decadeStart: group.currentDecadeStart,
+              ),
+              const SizedBox(height: AppTheme.spacingMd),
+              _WeeklyMovieCard(
+                groupId: group.id,
+                weekId: weekId,
+                userId: userProfile.uid,
+              ),
+              const SizedBox(height: AppTheme.spacingMd),
 
               // This Week's Episode Card
               Container(
@@ -664,81 +686,6 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                 onSendMessage: () => _sendChatMessage(group.id),
               ),
               const SizedBox(height: AppTheme.spacingMd),
-
-              // Action Buttons Row
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => context.push('/history'),
-                      icon: const Icon(Icons.history_rounded,
-                          color: AppTheme.lightOnSurface),
-                      label: const Text('History',
-                          style: TextStyle(color: AppTheme.lightOnSurface)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.lightBackground,
-                        foregroundColor: AppTheme.lightOnSurface,
-                        side: const BorderSide(
-                            color: AppTheme.lightOnSurface, width: 2),
-                        shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(AppTheme.radiusLg)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AppTheme.spacingMd),
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton.icon(
-                      onPressed: () => context.push('/playlist'),
-                      icon: const Icon(Icons.queue_music_rounded,
-                          color: AppTheme.lightOnPrimary),
-                      label: const Text('Open Playlist',
-                          style: TextStyle(color: AppTheme.lightOnPrimary)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.lightPrimary,
-                        foregroundColor: AppTheme.lightOnPrimary,
-                        shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(AppTheme.radiusLg)),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-
-              // AI Helper Card
-              GestureDetector(
-                onTap: () => context.push('/assistant'),
-                child: Container(
-                  padding: const EdgeInsets.all(AppTheme.spacingMd),
-                  decoration: BoxDecoration(
-                    color: AppTheme.lightSecondary,
-                    borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                    border:
-                        Border.all(color: const Color(0xFF1E7066), width: 2),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.auto_awesome_rounded,
-                          color: AppTheme.lightOnPrimary, size: 24),
-                      const SizedBox(width: AppTheme.spacingMd),
-                      Expanded(
-                        child: Text(
-                          "Need help remembering ${group.currentYear}? Ask the Nostalgia Assistant (AI).",
-                          style:
-                              Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: AppTheme.lightOnPrimary,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                        ),
-                      ),
-                      const Icon(Icons.chevron_right_rounded,
-                          color: AppTheme.lightOnPrimary),
-                    ],
-                  ),
-                ),
-              ),
 
               const SizedBox(height: AppTheme.spacingLg),
 
@@ -1092,6 +1039,165 @@ class _DecadeLeaderboardCard extends StatelessWidget {
             },
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _MagicActionsSection extends StatelessWidget {
+  final int year;
+  final VoidCallback onHistory;
+  final VoidCallback onPlaylist;
+  final VoidCallback onAssistant;
+
+  const _MagicActionsSection({
+    required this.year,
+    required this.onHistory,
+    required this.onPlaylist,
+    required this.onAssistant,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 760;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (isWide)
+              Row(
+                children: [
+                  Expanded(
+                    child: _MagicActionCard(
+                      icon: Icons.history_rounded,
+                      title: 'History',
+                      subtitle: 'Replay your previous weeks',
+                      backgroundColor: AppTheme.lightBackground,
+                      borderColor: AppTheme.lightOnSurface,
+                      foregroundColor: AppTheme.lightOnSurface,
+                      onTap: onHistory,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: _MagicActionCard(
+                      icon: Icons.queue_music_rounded,
+                      title: 'Open Playlist',
+                      subtitle: 'Jump into your group picks',
+                      backgroundColor: AppTheme.lightPrimary,
+                      borderColor: const Color(0xFF8F3E02),
+                      foregroundColor: AppTheme.lightOnPrimary,
+                      onTap: onPlaylist,
+                    ),
+                  ),
+                ],
+              )
+            else ...[
+              _MagicActionCard(
+                icon: Icons.history_rounded,
+                title: 'History',
+                subtitle: 'Replay your previous weeks',
+                backgroundColor: AppTheme.lightBackground,
+                borderColor: AppTheme.lightOnSurface,
+                foregroundColor: AppTheme.lightOnSurface,
+                onTap: onHistory,
+              ),
+              const SizedBox(height: 14),
+              _MagicActionCard(
+                icon: Icons.queue_music_rounded,
+                title: 'Open Playlist',
+                subtitle: 'Jump into your group picks',
+                backgroundColor: AppTheme.lightPrimary,
+                borderColor: const Color(0xFF8F3E02),
+                foregroundColor: AppTheme.lightOnPrimary,
+                onTap: onPlaylist,
+              ),
+            ],
+            const SizedBox(height: 14),
+            _MagicActionCard(
+              icon: Icons.auto_awesome_rounded,
+              title: 'Need help remembering?',
+              subtitle:
+                  'Ask the Nostalgia Assistant (AI) about $year.',
+              backgroundColor: AppTheme.lightSecondary,
+              borderColor: const Color(0xFF1E7066),
+              foregroundColor: AppTheme.lightOnPrimary,
+              onTap: onAssistant,
+              prominent: true,
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _MagicActionCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color backgroundColor;
+  final Color borderColor;
+  final Color foregroundColor;
+  final VoidCallback onTap;
+  final bool prominent;
+
+  const _MagicActionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.backgroundColor,
+    required this.borderColor,
+    required this.foregroundColor,
+    required this.onTap,
+    this.prominent = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 64),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: borderColor, width: prominent ? 2.5 : 2),
+          boxShadow: prominent ? AppTheme.shadowLg : AppTheme.shadowMd,
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: foregroundColor, size: prominent ? 26 : 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: foregroundColor,
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: foregroundColor.withValues(alpha: 0.88),
+                          fontWeight: FontWeight.w500,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: foregroundColor),
+          ],
+        ),
       ),
     );
   }

@@ -178,8 +178,9 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    if (group == null)
+    if (group == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,

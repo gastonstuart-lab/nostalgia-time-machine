@@ -24,6 +24,11 @@ class NostalgiaProvider extends ChangeNotifier {
   StreamSubscription? _membersSubscription;
   StreamSubscription? _songsSubscription;
   StreamSubscription? _episodesSubscription;
+  StreamSubscription? _authSubscription;
+  Timer? _splashTimer;
+  DateTime? _splashStartedAt;
+  static const Duration _minSplashDuration = Duration(milliseconds: 1400);
+  bool _authResolved = false;
 
   bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
@@ -39,52 +44,68 @@ class NostalgiaProvider extends ChangeNotifier {
   List<Episode> get episodes => _episodes;
 
   String get currentUserId => _authService.currentUid ?? '';
+  String? get currentUserEmail => _authService.currentEmail;
+  bool get isSignedIn => _authService.isSignedIn;
+  bool get requiresEmailVerification {
+    final user = _authService.currentUser;
+    if (user == null) return false;
+    final hasPasswordProvider =
+        user.providerData.any((p) => p.providerId == 'password');
+    return hasPasswordProvider && !user.emailVerified;
+  }
   bool get isGroupJoined => _currentGroup != null;
   bool get isCheckingAuth => !_isInitialized;
+  bool get authResolved => _authResolved;
+  bool get canExitSplash {
+    if (_splashStartedAt == null || !_authResolved) return false;
+    return DateTime.now().difference(_splashStartedAt!) >= _minSplashDuration;
+  }
+
+  void _resetSplashClock() {
+    _splashStartedAt = DateTime.now();
+  }
 
   // ============================================================================
   // INITIALIZATION
   // ============================================================================
 
   Future<void> initialize() async {
+    _resetSplashClock();
+    _authResolved = false;
     if (_isInitialized) return;
 
     try {
       debugPrint('🔄 Initializing NostalgiaProvider...');
 
+      _splashTimer?.cancel();
+      final remaining = _minSplashDuration -
+          DateTime.now().difference(_splashStartedAt!);
+      if (remaining > Duration.zero) {
+        _splashTimer = Timer(remaining, () {
+          notifyListeners();
+        });
+      }
+
       // Load theme preference
       await _loadThemePreference();
 
-      // Check if user is already signed in (persisted from previous session)
-      String? uid = _authService.currentUid;
-
-      // Only sign in anonymously if no user exists
-      if (uid == null) {
-        debugPrint('🔐 No existing session, signing in anonymously...');
-        await _authService.signInAnonymously();
-        uid = _authService.currentUid;
-      } else {
-        debugPrint('✅ Found existing session for user: $uid');
-      }
-
-      if (uid == null) {
-        debugPrint('❌ No user after initialization');
-        return;
-      }
-
-      // Load user profile if exists
-      final existingProfile = await _firestoreService.getUserProfile(uid);
-      if (existingProfile != null) {
-        _currentUserProfile = existingProfile;
-        await _firestoreService.updateLastSeen(uid);
-        debugPrint('✅ Loaded user profile: ${existingProfile.displayName}');
-
-        // Check if user is in a group and restore session
-        final groupId = await _firestoreService.getUserGroupId(uid);
-        if (groupId != null) {
-          debugPrint('🔄 Restoring group session: $groupId');
-          await _listenToGroup(groupId);
+      _authSubscription = _authService.authStateChanges.listen((_) async {
+        await _handleAuthChanged();
+        if (!_authResolved) {
+          _authResolved = true;
         }
+        notifyListeners();
+      });
+      try {
+        await _authService.authStateChanges
+            .first
+            .timeout(const Duration(seconds: 4));
+      } catch (_) {
+        // Fallback for slow / flaky network auth resolution.
+      }
+      if (!_authResolved) {
+        await _handleAuthChanged();
+        _authResolved = true;
       }
 
       _isInitialized = true;
@@ -93,6 +114,71 @@ class NostalgiaProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('❌ Failed to initialize: $e');
     }
+  }
+
+  Future<void> _handleAuthChanged() async {
+    final uid = _authService.currentUid;
+    if (uid == null) {
+      await _groupSubscription?.cancel();
+      await _membersSubscription?.cancel();
+      await _songsSubscription?.cancel();
+      await _episodesSubscription?.cancel();
+      _currentUserProfile = null;
+      _currentGroup = null;
+      _currentWeekId = null;
+      _members = [];
+      _songs = [];
+      _episodes = [];
+      return;
+    }
+
+    final existingProfile = await _firestoreService.getUserProfile(uid);
+    if (existingProfile != null) {
+      _currentUserProfile = existingProfile;
+      await _firestoreService.updateLastSeen(uid);
+      final groupId = await _firestoreService.getUserGroupId(uid);
+      if (groupId != null) {
+        await _listenToGroup(groupId);
+      }
+    } else {
+      await _groupSubscription?.cancel();
+      await _membersSubscription?.cancel();
+      await _songsSubscription?.cancel();
+      await _episodesSubscription?.cancel();
+      _currentUserProfile = null;
+      _currentGroup = null;
+      _currentWeekId = null;
+      _members = [];
+      _songs = [];
+      _episodes = [];
+    }
+  }
+
+  Future<void> signInWithGoogle() async {
+    await _authService.signInWithGoogle();
+    await _handleAuthChanged();
+    notifyListeners();
+  }
+
+  Future<void> signUpWithEmail(String email, String password) async {
+    await _authService.signUpWithEmailAndPassword(email, password);
+    await _handleAuthChanged();
+    notifyListeners();
+  }
+
+  Future<void> resendVerificationEmail() async {
+    await _authService.sendEmailVerification();
+  }
+
+  Future<void> refreshEmailVerification() async {
+    await _authService.reloadCurrentUser();
+    notifyListeners();
+  }
+
+  Future<void> signOutUser() async {
+    await _authService.signOut();
+    await _handleAuthChanged();
+    notifyListeners();
   }
 
   // ============================================================================
@@ -455,6 +541,8 @@ class NostalgiaProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _splashTimer?.cancel();
+    _authSubscription?.cancel();
     _groupSubscription?.cancel();
     _membersSubscription?.cancel();
     _songsSubscription?.cancel();

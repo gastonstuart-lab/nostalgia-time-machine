@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -35,7 +36,7 @@ class YouTubeService {
         'videoCategoryId': '10', // Music category
       });
       
-      final response = await http.get(uri);
+      final response = await http.get(uri).timeout(const Duration(seconds: 15));
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -49,6 +50,9 @@ class YouTubeService {
         debugPrint('YouTube API error: ${response.statusCode} - ${response.body}');
         throw Exception('Failed to search YouTube: ${response.statusCode}');
       }
+    } on TimeoutException catch (e) {
+      debugPrint('YouTube request timed out: $e');
+      throw Exception('YouTube request timed out. Please try again.');
     } catch (e) {
       debugPrint('YouTube search error: $e');
       rethrow;

@@ -6,6 +6,7 @@ import 'package:nostalgia_time_machine/models/movie.dart';
 import 'package:nostalgia_time_machine/services/firestore_service.dart';
 import 'package:nostalgia_time_machine/state.dart';
 import 'package:nostalgia_time_machine/theme.dart';
+import 'package:nostalgia_time_machine/widgets/error_state.dart';
 
 class WeeklyMoviesScreen extends StatelessWidget {
   const WeeklyMoviesScreen({super.key});
@@ -70,7 +71,21 @@ class WeeklyMoviesScreen extends StatelessWidget {
             stream: FirestoreService().streamMovies(group.id, weekId),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
+                return const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: AppTheme.spacingSm),
+                      Text('Loading this week\'s movie picks...'),
+                    ],
+                  ),
+                );
+              }
+              if (snapshot.hasError) {
+                return const ErrorState(
+                  message: 'Could not load movie picks right now. Please try again.',
+                );
               }
               final movies = snapshot.data ?? [];
               if (movies.isEmpty) {

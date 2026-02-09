@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +7,7 @@ import 'package:nostalgia_time_machine/models/quiz_score.dart';
 import 'package:nostalgia_time_machine/services/firestore_service.dart';
 import 'package:nostalgia_time_machine/state.dart';
 import 'package:nostalgia_time_machine/theme.dart';
+import 'package:nostalgia_time_machine/widgets/error_state.dart';
 
 class WeeklyQuizScreen extends StatefulWidget {
   const WeeklyQuizScreen({super.key});
@@ -26,7 +28,10 @@ class _WeeklyQuizScreenState extends State<WeeklyQuizScreen> {
   String? _groupId;
   String? _weekId;
   String? _userId;
+  int? _currentYear;
+  String _quizDifficulty = 'medium';
   String _displayName = 'Anonymous';
+  String? _yearLockError;
 
   @override
   void initState() {
@@ -50,17 +55,48 @@ class _WeeklyQuizScreenState extends State<WeeklyQuizScreen> {
     _groupId = group.id;
     _weekId = weekId;
     _userId = userId;
+    _currentYear = group.currentYear;
+    _quizDifficulty = group.quizDifficulty;
     _displayName = displayName;
 
     try {
-      final quiz = await _firestoreService.fetchWeeklyQuiz(group.id, weekId);
+      final definitionBeforeFetch =
+          await _firestoreService.getQuizDefinition(group.id, weekId);
+      final initialStrictQuiz = _filterStrictYearLockedQuestions(
+        definitionBeforeFetch,
+        group.currentYear,
+      );
+      final bool loadedFromDefinition = initialStrictQuiz.length == 20;
+      List<QuizQuestion> strictQuiz = initialStrictQuiz;
+
+      if (!loadedFromDefinition) {
+        await _firestoreService.fetchWeeklyQuiz(
+          group.id,
+          weekId,
+          year: group.currentYear,
+          difficulty: group.quizDifficulty,
+        );
+        final latestDefinition =
+            await _firestoreService.getQuizDefinition(group.id, weekId);
+        strictQuiz = _filterStrictYearLockedQuestions(
+          latestDefinition,
+          group.currentYear,
+        );
+      }
+      debugPrint(
+          '[QUIZ_SCREEN] year=${group.currentYear} weekId=$weekId source=${loadedFromDefinition ? 'definition' : 'generated'}');
       final existing =
           await _firestoreService.getUserQuizScore(group.id, weekId, userId);
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() {
-        _questions = quiz;
-        _selectedAnswers = List<int?>.filled(quiz.length, null);
+        _questions = strictQuiz;
+        _selectedAnswers = List<int?>.filled(strictQuiz.length, null);
         _existingScore = existing;
+        _yearLockError = strictQuiz.length < 20
+            ? 'This quiz is not locked to YEAR ${group.currentYear} yet. Please regenerate.'
+            : null;
         _isLoading = false;
       });
     } catch (e) {
@@ -127,22 +163,44 @@ class _WeeklyQuizScreenState extends State<WeeklyQuizScreen> {
   }
 
   Future<void> _regenerateQuiz() async {
-    if (_groupId == null || _weekId == null || _isRegenerating) return;
+    if (_groupId == null ||
+        _weekId == null ||
+        _currentYear == null ||
+        _isRegenerating) {
+      return;
+    }
 
     setState(() => _isRegenerating = true);
     try {
-      final quiz = await _firestoreService.fetchWeeklyQuiz(
+      await _firestoreService.fetchWeeklyQuiz(
         _groupId!,
         _weekId!,
+        year: _currentYear!,
+        difficulty: _quizDifficulty,
         forceRegenerate: true,
+      );
+      final latestDefinition =
+          await _firestoreService.getQuizDefinition(_groupId!, _weekId!);
+      final strictQuiz = _filterStrictYearLockedQuestions(
+        latestDefinition,
+        _currentYear!,
       );
       if (!mounted) return;
       setState(() {
-        _questions = quiz;
-        _selectedAnswers = List<int?>.filled(quiz.length, null);
+        _questions = strictQuiz;
+        _selectedAnswers = List<int?>.filled(strictQuiz.length, null);
+        _yearLockError = strictQuiz.length < 20
+            ? 'This quiz is not locked to YEAR $_currentYear yet. Please regenerate.'
+            : null;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Quiz regenerated.')),
+        SnackBar(
+          content: Text(
+            strictQuiz.length < 20
+                ? 'Regenerated, but quiz is still not year-locked.'
+                : 'Quiz regenerated.',
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -154,6 +212,37 @@ class _WeeklyQuizScreenState extends State<WeeklyQuizScreen> {
         setState(() => _isRegenerating = false);
       }
     }
+  }
+
+  List<QuizQuestion> _filterStrictYearLockedQuestions(
+    Map<String, dynamic>? definition,
+    int year,
+  ) {
+    final rawQuestions = definition?['questions'] as List<dynamic>?;
+    if (rawQuestions == null) return [];
+    final strict = rawQuestions.whereType<Map>().map((q) {
+      final map = Map<String, dynamic>.from(q);
+      final qYear = (map['year'] as num?)?.toInt();
+      final options = (map['choices'] as List?) ?? (map['options'] as List?);
+      final placeholderPrefixes = options
+          ?.map((o) => RegExp(r'^(.+)\s+[A-D]$').firstMatch('$o')?.group(1))
+          .whereType<String>()
+          .map((s) => s.toLowerCase())
+          .toList();
+      final hasPlaceholderOptions = placeholderPrefixes != null &&
+          placeholderPrefixes.length == 4 &&
+          placeholderPrefixes.toSet().length == 1;
+      return (qYear == year && !hasPlaceholderOptions)
+          ? QuizQuestion.fromJson(map)
+          : null;
+    }).whereType<QuizQuestion>().toList();
+    return strict;
+  }
+
+  Future<void> _resetQuizForThisWeek() async {
+    if (!kDebugMode || _groupId == null || _weekId == null) return;
+    await _firestoreService.deleteQuizDefinition(_groupId!, _weekId!);
+    await _regenerateQuiz();
   }
 
   @override
@@ -217,7 +306,34 @@ class _WeeklyQuizScreenState extends State<WeeklyQuizScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (_existingScore != null)
+              if (_yearLockError != null) ...[
+                ErrorState(
+                  message: _yearLockError!,
+                  onRetry: _regenerateQuiz,
+                ),
+                const SizedBox(height: AppTheme.spacingSm),
+                ElevatedButton(
+                  onPressed: _isRegenerating ? null : _regenerateQuiz,
+                  child: const Text('Regenerate quiz'),
+                ),
+                if (kDebugMode) ...[
+                  const SizedBox(height: AppTheme.spacingSm),
+                  OutlinedButton(
+                    onPressed: _isRegenerating ? null : _resetQuizForThisWeek,
+                    child: const Text('Reset quiz for this week'),
+                  ),
+                ],
+                const SizedBox(height: AppTheme.spacingLg),
+              ],
+              Text(
+                'Quiz Year: ${_currentYear ?? '-'} • Difficulty: $_quizDifficulty',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppTheme.lightSecondaryText,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const SizedBox(height: AppTheme.spacingMd),
+              if (_yearLockError == null && _existingScore != null)
                 Container(
                   padding: const EdgeInsets.all(AppTheme.spacingLg),
                   decoration: BoxDecoration(
@@ -233,7 +349,7 @@ class _WeeklyQuizScreenState extends State<WeeklyQuizScreen> {
                         ),
                   ),
                 )
-              else ...[
+              else if (_yearLockError == null) ...[
                 ..._questions.asMap().entries.map((entry) {
                   final index = entry.key;
                   final question = entry.value;
@@ -281,7 +397,8 @@ class _WeeklyQuizScreenState extends State<WeeklyQuizScreen> {
                 }),
                 const SizedBox(height: AppTheme.spacingSm),
                 ElevatedButton(
-                  onPressed: _isSubmitting ? null : _submitQuiz,
+                  onPressed:
+                      (_isSubmitting || _questions.isEmpty) ? null : _submitQuiz,
                   child: _isSubmitting
                       ? const SizedBox(
                           height: 18,

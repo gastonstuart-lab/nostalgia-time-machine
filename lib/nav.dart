@@ -1,6 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
 import 'screens/join_create.dart';
 import 'screens/weekly_dashboard.dart';
 import 'screens/add_song.dart';
@@ -15,6 +15,8 @@ import 'screens/group_chat.dart';
 import 'screens/weekly_quiz.dart';
 import 'screens/add_movie.dart';
 import 'screens/weekly_movies.dart';
+import 'screens/welcome.dart';
+import 'screens/email_verification.dart';
 import 'state.dart';
 import 'theme.dart';
 
@@ -24,17 +26,48 @@ class AppRouter {
         refreshListenable: provider,
         redirect: (context, state) {
           final isOnSplash = state.matchedLocation == AppRoutes.splash;
+          final isOnWelcome = state.matchedLocation == AppRoutes.welcome;
+          final isOnEmailVerification =
+              state.matchedLocation == AppRoutes.emailVerification;
           final isOnJoinCreate = state.matchedLocation == AppRoutes.joinCreate;
           final isInitialized = provider.isInitialized;
+          final authResolved = provider.authResolved;
+          final canExitSplash = provider.canExitSplash;
+          final isSignedIn = provider.isSignedIn;
+          final requiresEmailVerification = provider.requiresEmailVerification;
           final isGroupJoined = provider.isGroupJoined;
+          debugPrint(
+              '[SPLASH] authResolved=$authResolved, canExitSplash=$canExitSplash, initialized=$isInitialized');
 
           // Show splash while initializing
-          if (!isInitialized && !isOnSplash) {
+          if ((!isInitialized || !authResolved || !canExitSplash) &&
+              !isOnSplash) {
             return AppRoutes.splash;
+          }
+
+          if (isOnSplash &&
+              (!isInitialized || !authResolved || !canExitSplash)) {
+            return null;
           }
 
           // Once initialized, redirect from splash based on group status
           if (isInitialized && isOnSplash) {
+            if (!isSignedIn) return AppRoutes.welcome;
+            if (requiresEmailVerification) return AppRoutes.emailVerification;
+            return isGroupJoined ? AppRoutes.dashboard : AppRoutes.joinCreate;
+          }
+
+          if (!isSignedIn && !isOnWelcome) {
+            return AppRoutes.welcome;
+          }
+
+          if (isSignedIn && requiresEmailVerification && !isOnEmailVerification) {
+            return AppRoutes.emailVerification;
+          }
+
+          if (isSignedIn &&
+              !requiresEmailVerification &&
+              (isOnWelcome || isOnEmailVerification)) {
             return isGroupJoined ? AppRoutes.dashboard : AppRoutes.joinCreate;
           }
 
@@ -53,6 +86,14 @@ class AppRouter {
           GoRoute(
             path: AppRoutes.joinCreate,
             builder: (context, state) => const JoinCreateScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.welcome,
+            builder: (context, state) => const WelcomeScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.emailVerification,
+            builder: (context, state) => const EmailVerificationScreen(),
           ),
           GoRoute(
             path: AppRoutes.dashboard,
@@ -113,6 +154,8 @@ class AppRouter {
 class AppRoutes {
   static const String splash = '/';
   static const String joinCreate = '/join-create';
+  static const String welcome = '/welcome';
+  static const String emailVerification = '/email-verification';
   static const String dashboard = '/dashboard';
   static const String addSong = '/add-song';
   static const String addTV = '/add-tv';
@@ -128,55 +171,110 @@ class AppRoutes {
   static const String weeklyMovies = '/movies';
 }
 
-class SplashScreen extends StatelessWidget {
+class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
   @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  static const _items = <({IconData icon, String label})>[
+    (icon: Icons.album, label: 'VINYL'),
+    (icon: Icons.library_music, label: 'CASSETTE'),
+    (icon: Icons.disc_full, label: 'CD'),
+    (icon: Icons.graphic_eq, label: 'STREAM'),
+  ];
+
+  Timer? _ticker;
+  int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(milliseconds: 450), (_) {
+      if (!mounted) return;
+      setState(() => _index = (_index + 1) % _items.length);
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final provider = context.watch<NostalgiaProvider>();
+    final current = _items[_index];
 
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.onSurface,
-                  width: 3,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF0B1020), Color(0xFF1A2238), Color(0xFF0E1628)],
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 320),
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(scale: animation, child: child),
+                ),
+                child: Icon(
+                  current.icon,
+                  key: ValueKey(current.label),
+                  size: 110,
+                  color: Colors.white.withValues(alpha: 0.95),
                 ),
               ),
-              child: Icon(
-                Icons.access_time_rounded,
-                size: 60,
-                color: Theme.of(context).colorScheme.onPrimary,
+              const SizedBox(height: AppTheme.spacingMd),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 320),
+                child: Text(
+                  current.label,
+                  key: ValueKey('label_${current.label}'),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 2.4,
+                      ),
+                ),
               ),
-            ),
-            const SizedBox(height: AppTheme.spacingXl),
-            Text(
-              'Nostalgia Time Machine',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
-            ),
-            const SizedBox(height: AppTheme.spacingSm),
-            if (provider.isGroupJoined && provider.currentUserProfile != null)
+              const SizedBox(height: AppTheme.spacingLg),
               Text(
-                'Welcome back, ${provider.currentUserProfile!.displayName}! 👋',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontWeight: FontWeight.bold,
+                'Nostalgia Time Machine',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
                     ),
-              )
-            else
-              const CircularProgressIndicator(),
-          ],
+              ),
+              const SizedBox(height: AppTheme.spacingSm),
+              Text(
+                'Travel back in time through the music of your life',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w500,
+                    ),
+              ),
+              const SizedBox(height: AppTheme.spacingLg),
+              const SizedBox(
+                width: 220,
+                child: LinearProgressIndicator(
+                  minHeight: 4,
+                  backgroundColor: Colors.white24,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

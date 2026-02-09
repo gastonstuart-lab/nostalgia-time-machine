@@ -6,6 +6,8 @@ class Group {
   final DateTime createdAt;
   final String createdByUid;
   final int currentYear;
+  final int startYear;
+  final int weekIndex;
   final int currentDecadeStart;
   final DateTime currentWeekStart;
   final String status; // "active" or "decade_vote"
@@ -46,6 +48,8 @@ class Group {
     required this.createdAt,
     required this.createdByUid,
     required this.currentYear,
+    this.startYear = 1990,
+    this.weekIndex = 1,
     required this.currentDecadeStart,
     required this.currentWeekStart,
     this.status = 'active',
@@ -59,6 +63,8 @@ class Group {
         'createdAt': Timestamp.fromDate(createdAt),
         'createdByUid': createdByUid,
         'currentYear': currentYear,
+        'startYear': startYear,
+        'weekIndex': weekIndex,
         'currentDecadeStart': currentDecadeStart,
         'currentWeekStart': Timestamp.fromDate(currentWeekStart),
         'status': status,
@@ -75,7 +81,18 @@ class Group {
       code: json['code'] ?? '',
       createdAt: (json['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       createdByUid: json['createdByUid'] ?? '',
-      currentYear: json['currentYear'] ?? 1990,
+      currentYear: (json['currentYear'] as num?)?.toInt() ?? 1990,
+      startYear: (json['startYear'] as num?)?.toInt() ??
+          (json['currentDecadeStart'] as num?)?.toInt() ??
+          (json['currentYear'] as num?)?.toInt() ??
+          1990,
+      weekIndex: ((json['weekIndex'] as num?)?.toInt() ??
+              (((json['currentYear'] as num?)?.toInt() ?? 1990) -
+                      ((json['startYear'] as num?)?.toInt() ??
+                          (json['currentDecadeStart'] as num?)?.toInt() ??
+                          1990) +
+                  1))
+          .clamp(1, 9999),
       currentDecadeStart: json['currentDecadeStart'] ?? 1990,
       currentWeekStart:
           (json['currentWeekStart'] as Timestamp?)?.toDate() ?? DateTime.now(),
