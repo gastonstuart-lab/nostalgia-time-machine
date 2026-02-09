@@ -37,7 +37,7 @@ class NostalgiaProvider extends ChangeNotifier {
   List<Member> get members => _members;
   List<Song> get songs => _songs;
   List<Episode> get episodes => _episodes;
-  
+
   String get currentUserId => _authService.currentUid ?? '';
   bool get isGroupJoined => _currentGroup != null;
   bool get isCheckingAuth => !_isInitialized;
@@ -51,13 +51,13 @@ class NostalgiaProvider extends ChangeNotifier {
 
     try {
       debugPrint('🔄 Initializing NostalgiaProvider...');
-      
+
       // Load theme preference
       await _loadThemePreference();
-      
+
       // Check if user is already signed in (persisted from previous session)
       String? uid = _authService.currentUid;
-      
+
       // Only sign in anonymously if no user exists
       if (uid == null) {
         debugPrint('🔐 No existing session, signing in anonymously...');
@@ -66,7 +66,7 @@ class NostalgiaProvider extends ChangeNotifier {
       } else {
         debugPrint('✅ Found existing session for user: $uid');
       }
-      
+
       if (uid == null) {
         debugPrint('❌ No user after initialization');
         return;
@@ -78,7 +78,7 @@ class NostalgiaProvider extends ChangeNotifier {
         _currentUserProfile = existingProfile;
         await _firestoreService.updateLastSeen(uid);
         debugPrint('✅ Loaded user profile: ${existingProfile.displayName}');
-        
+
         // Check if user is in a group and restore session
         final groupId = await _firestoreService.getUserGroupId(uid);
         if (groupId != null) {
@@ -112,9 +112,10 @@ class NostalgiaProvider extends ChangeNotifier {
 
   Future<void> toggleTheme() async {
     try {
-      _themeMode = _themeMode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+      _themeMode =
+          _themeMode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
       notifyListeners();
-      
+
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('isDarkMode', _themeMode == ThemeMode.dark);
       debugPrint('✅ Theme toggled to: $_themeMode');
@@ -169,7 +170,7 @@ class NostalgiaProvider extends ChangeNotifier {
 
       // Start listening to group data
       await _listenToGroup(group.id);
-      
+
       debugPrint('✅ Successfully joined group: ${group.code}');
       return true;
     } catch (e) {
@@ -182,6 +183,10 @@ class NostalgiaProvider extends ChangeNotifier {
     required String displayName,
     required String avatarIcon,
     required int avatarColor,
+    required int startDecade,
+    required String quizDifficulty,
+    int songCapPerUser = 7,
+    int episodeCapPerUser = 1,
   }) async {
     try {
       final uid = _authService.currentUid;
@@ -208,6 +213,10 @@ class NostalgiaProvider extends ChangeNotifier {
       final group = await _firestoreService.createGroup(
         code: code,
         createdByUid: uid,
+        startDecade: startDecade,
+        quizDifficulty: quizDifficulty,
+        songCapPerUser: songCapPerUser,
+        episodeCapPerUser: episodeCapPerUser,
       );
 
       // Add creator as first member
@@ -220,12 +229,13 @@ class NostalgiaProvider extends ChangeNotifier {
       );
 
       // Create default chat session immediately
-      await _firestoreService.getOrCreateChatSession(group.id, createdByUid: uid);
+      await _firestoreService.getOrCreateChatSession(group.id,
+          createdByUid: uid);
       debugPrint('✅ Default chat session created for new group');
 
       // Start listening to group data
       await _listenToGroup(group.id);
-      
+
       debugPrint('✅ Successfully created group: $code');
       return true;
     } catch (e) {
@@ -252,11 +262,12 @@ class NostalgiaProvider extends ChangeNotifier {
     await _episodesSubscription?.cancel();
 
     // Listen to group
-    _groupSubscription = _firestoreService.streamGroup(groupId).listen((group) async {
+    _groupSubscription =
+        _firestoreService.streamGroup(groupId).listen((group) async {
       if (group != null) {
         final previousWeekId = _currentWeekId;
         _currentGroup = group;
-        
+
         // Use currentWeekId from group if available, otherwise generate one
         if (group.currentWeekId != null) {
           _currentWeekId = group.currentWeekId;
@@ -266,25 +277,26 @@ class NostalgiaProvider extends ChangeNotifier {
             group.currentYear,
           );
         }
-        
+
         // If week changed, update streams
         if (_currentWeekId != previousWeekId && _currentWeekId != null) {
           await _updateWeekStreams(groupId, _currentWeekId!);
         }
-        
+
         notifyListeners();
       }
     });
 
     // Listen to members
-    _membersSubscription = _firestoreService.streamMembers(groupId).listen((members) {
+    _membersSubscription =
+        _firestoreService.streamMembers(groupId).listen((members) {
       _members = members;
       notifyListeners();
     });
 
     // Wait for group to load to get weekId
     await Future.delayed(const Duration(milliseconds: 500));
-    
+
     if (_currentWeekId != null) {
       await _updateWeekStreams(groupId, _currentWeekId!);
     }
@@ -296,17 +308,15 @@ class NostalgiaProvider extends ChangeNotifier {
     await _episodesSubscription?.cancel();
 
     // Listen to songs
-    _songsSubscription = _firestoreService
-        .streamSongs(groupId, weekId)
-        .listen((songs) {
+    _songsSubscription =
+        _firestoreService.streamSongs(groupId, weekId).listen((songs) {
       _songs = songs;
       notifyListeners();
     });
 
     // Listen to episodes
-    _episodesSubscription = _firestoreService
-        .streamEpisodes(groupId, weekId)
-        .listen((episodes) {
+    _episodesSubscription =
+        _firestoreService.streamEpisodes(groupId, weekId).listen((episodes) {
       _episodes = episodes;
       notifyListeners();
     });
@@ -350,7 +360,7 @@ class NostalgiaProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       if (e.toString().contains('LIMIT_REACHED')) {
-        debugPrint('⚠️ Song limit reached (7/7)');
+        debugPrint('⚠️ Song limit reached');
       } else {
         debugPrint('❌ Failed to add song: $e');
       }

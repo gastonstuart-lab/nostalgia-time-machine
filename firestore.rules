@@ -8,6 +8,12 @@ service cloud.firestore {
              exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
     }
 
+    function isGroupAdmin(groupId) {
+      return request.auth != null &&
+             (get(/databases/$(database)/documents/groups/$(groupId)).data.adminUid == request.auth.uid ||
+              get(/databases/$(database)/documents/groups/$(groupId)).data.createdByUid == request.auth.uid);
+    }
+
     // ============================================================================
     // USERS
     // ============================================================================
@@ -26,7 +32,10 @@ service cloud.firestore {
       allow create: if request.auth != null;
       
       // Allow update if requester is a member
-      allow update: if isMember(groupId);
+        // Allow update if requester is a member, except settings (admin only)
+        allow update: if isMember(groupId) &&
+          (!('settings' in request.resource.data) ||
+           (request.auth != null && request.auth.uid == resource.data.adminUid));
       
       // Allow delete if requester is a member (optional, can restrict further)
       allow delete: if isMember(groupId);
@@ -49,8 +58,8 @@ service cloud.firestore {
         // Allow read if requester is a member
         allow read: if isMember(groupId);
         
-        // Allow create if requester is a member
-        allow create: if isMember(groupId);
+        // Allow create if requester is a member or group admin (bootstrap path)
+        allow create: if isMember(groupId) || isGroupAdmin(groupId);
         
         // Allow update if requester is a member (for advanceYear transaction)
         allow update: if isMember(groupId);
@@ -97,6 +106,42 @@ service cloud.firestore {
           // Allow update/delete only if requester is the owner
           allow update, delete: if request.auth != null && 
                                    resource.data.addedByUid == request.auth.uid;
+        }
+
+        // ============================================================================
+        // MOVIES
+        // ============================================================================
+        match /movies/{movieId} {
+          // Allow read if requester is a member
+          allow read: if isMember(groupId);
+
+          // Allow create if requester is a member
+          allow create: if isMember(groupId);
+
+          // Allow update/delete if owner or group admin
+          allow update, delete: if request.auth != null &&
+                                  (resource.data.addedByUid == request.auth.uid ||
+                                   isGroupAdmin(groupId));
+        }
+
+        // ============================================================================
+        // WEEKLY QUIZ
+        // ============================================================================
+        match /quiz/{quizDocId} {
+          // Allow read/write quiz definition for group members
+          allow read, create, update: if isMember(groupId);
+          allow delete: if false;
+        }
+
+        match /quizScores/{userId} {
+          // Members can read leaderboard
+          allow read: if isMember(groupId);
+
+          // User can create own score once (no update/delete for retakes)
+          allow create: if isMember(groupId) &&
+                           request.auth != null &&
+                           request.auth.uid == userId;
+          allow update, delete: if false;
         }
       }
 
@@ -146,6 +191,26 @@ service cloud.firestore {
           // Disallow update/delete (append-only)
           allow update, delete: if false;
         }
+      }
+
+      // ============================================================================
+      // DECADE SCORES / WINNERS
+      // ============================================================================
+      match /decadeScores/{userId} {
+        allow read: if isMember(groupId);
+        allow create: if isMember(groupId) &&
+                         request.auth != null &&
+                         request.auth.uid == userId;
+        allow update: if isMember(groupId) &&
+                         (request.auth != null && request.auth.uid == userId ||
+                          isGroupAdmin(groupId));
+        allow delete: if false;
+      }
+
+      match /decadeWinners/{decadeId} {
+        allow read: if isMember(groupId);
+        allow create, update: if isGroupAdmin(groupId);
+        allow delete: if false;
       }
     }
   }

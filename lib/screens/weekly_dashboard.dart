@@ -8,7 +8,10 @@ import '../state.dart';
 import '../services/firestore_service.dart';
 import '../models/episode.dart';
 import '../models/group_message.dart';
-import '../models/member.dart';
+import '../models/quiz_score.dart';
+import '../models/movie.dart';
+import '../models/decade_score.dart';
+import '../models/decade_winner.dart';
 import '../components/theme_toggle.dart';
 
 class WeeklyDashboardScreen extends StatefulWidget {
@@ -30,7 +33,8 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
     super.dispose();
   }
 
-  Future<void> _showAdvanceYearDialog(BuildContext context, String groupId, int currentYear) async {
+  Future<void> _showAdvanceYearDialog(
+      BuildContext context, String groupId, int currentYear) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -70,7 +74,7 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
     try {
       final provider = context.read<NostalgiaProvider>();
       final userProfile = provider.currentUserProfile;
-      
+
       if (userProfile == null) {
         throw Exception('User profile not found');
       }
@@ -104,7 +108,7 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
 
     try {
       await _firestoreService.advanceYear(groupId);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -136,6 +140,7 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
     final userProfile = provider.currentUserProfile;
     final songs = provider.songs;
     final episodes = provider.episodes;
+    final weekId = provider.currentWeekId;
 
     if (group == null || userProfile == null) {
       return const Scaffold(
@@ -144,9 +149,11 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
     }
 
     // Calculate progress
-    final userSongs = songs.where((s) => s.addedByUid == userProfile.uid).length;
+    final userSongs =
+        songs.where((s) => s.addedByUid == userProfile.uid).length;
     final userTV = episodes.any((e) => e.addedByUid == userProfile.uid);
-    
+    final songCap = group.songCapPerUser;
+
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -186,13 +193,14 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
               Stack(
                 alignment: Alignment.center,
                 children: [
-                   Container(
+                  Container(
                     width: 180,
                     height: 180,
                     decoration: BoxDecoration(
                       color: AppTheme.lightAccent,
                       shape: BoxShape.circle,
-                      border: Border.all(color: AppTheme.lightOnSurface, width: 6),
+                      border:
+                          Border.all(color: AppTheme.lightOnSurface, width: 6),
                       boxShadow: AppTheme.shadowXl,
                     ),
                     child: Center(
@@ -201,25 +209,34 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                         children: [
                           Text(
                             "YEAR",
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.lightOnSurface,
-                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  color: AppTheme.lightOnSurface,
+                                ),
                           ),
                           Text(
                             "${group.currentYear}",
-                            style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                              fontWeight: FontWeight.w900,
-                              color: AppTheme.lightOnSurface,
-                              fontSize: 48,
-                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineLarge
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w900,
+                                  color: AppTheme.lightOnSurface,
+                                  fontSize: 48,
+                                ),
                           ),
                           Text(
                             "WEEK 5", // Mock week
-                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.lightOnSurface,
-                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: AppTheme.lightOnSurface,
+                                ),
                           ),
                         ],
                       ),
@@ -229,12 +246,22 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                   Positioned(
                     left: 0,
                     top: 80,
-                    child: Container(width: 20, height: 8, decoration: BoxDecoration(color: AppTheme.lightOnSurface, borderRadius: BorderRadius.circular(2))),
+                    child: Container(
+                        width: 20,
+                        height: 8,
+                        decoration: BoxDecoration(
+                            color: AppTheme.lightOnSurface,
+                            borderRadius: BorderRadius.circular(2))),
                   ),
                   Positioned(
                     right: 0,
                     top: 80,
-                    child: Container(width: 20, height: 8, decoration: BoxDecoration(color: AppTheme.lightOnSurface, borderRadius: BorderRadius.circular(2))),
+                    child: Container(
+                        width: 20,
+                        height: 8,
+                        decoration: BoxDecoration(
+                            color: AppTheme.lightOnSurface,
+                            borderRadius: BorderRadius.circular(2))),
                   ),
                 ],
               ),
@@ -250,22 +277,23 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.key_rounded, color: AppTheme.lightOnSurface, size: 20),
+                    const Icon(Icons.key_rounded,
+                        color: AppTheme.lightOnSurface, size: 20),
                     const SizedBox(width: AppTheme.spacingSm),
                     Text(
                       "Group Code: ",
                       style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.lightOnSurface,
-                      ),
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.lightOnSurface,
+                          ),
                     ),
                     SelectableText(
                       group.code,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        color: AppTheme.lightOnSurface,
-                        letterSpacing: 2,
-                      ),
+                            fontWeight: FontWeight.w900,
+                            color: AppTheme.lightOnSurface,
+                            letterSpacing: 2,
+                          ),
                     ),
                     const Spacer(),
                     GestureDetector(
@@ -279,25 +307,34 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           color: AppTheme.lightBackground,
-                          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                          border: Border.all(color: AppTheme.lightOnSurface, width: 2),
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusMd),
+                          border: Border.all(
+                              color: AppTheme.lightOnSurface, width: 2),
                         ),
-                        child: const Icon(Icons.copy_rounded, size: 16, color: AppTheme.lightOnSurface),
+                        child: const Icon(Icons.copy_rounded,
+                            size: 16, color: AppTheme.lightOnSurface),
                       ),
                     ),
                     const SizedBox(width: AppTheme.spacingSm),
                     GestureDetector(
                       onTap: () {
-                        Share.share('Join my Rewind crew! Code: ${group.code}');
+                        SharePlus.instance.share(
+                          ShareParams(
+                              text: 'Join my Rewind crew! Code: ${group.code}'),
+                        );
                       },
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           color: AppTheme.lightSecondary,
-                          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                          border: Border.all(color: const Color(0xFF1E7066), width: 2),
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusMd),
+                          border: Border.all(
+                              color: const Color(0xFF1E7066), width: 2),
                         ),
-                        child: const Icon(Icons.share_rounded, size: 16, color: AppTheme.lightOnPrimary),
+                        child: const Icon(Icons.share_rounded,
+                            size: 16, color: AppTheme.lightOnPrimary),
                       ),
                     ),
                   ],
@@ -324,27 +361,36 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                           children: [
                             Text(
                               "Your Collection",
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                color: AppTheme.lightPrimaryText,
-                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    color: AppTheme.lightPrimaryText,
+                                  ),
                             ),
                             Text(
-                              "$userSongs of 7 songs added",
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: AppTheme.lightSecondaryText,
-                              ),
+                              "$userSongs of $songCap songs added",
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: AppTheme.lightSecondaryText,
+                                  ),
                             ),
                           ],
                         ),
                         GestureDetector(
                           onTap: () => context.push('/add-song'),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
                               color: AppTheme.lightSecondary,
-                              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                              border: Border.all(color: const Color(0xFF1E7066), width: 2),
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.radiusLg),
+                              border: Border.all(
+                                  color: const Color(0xFF1E7066), width: 2),
                             ),
                             child: const Text(
                               "+ ADD",
@@ -361,16 +407,20 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                     const SizedBox(height: AppTheme.spacingMd),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: List.generate(7, (index) {
+                      children: List.generate(songCap, (index) {
                         final filled = index < userSongs;
                         return Container(
                           width: 12,
                           height: 12,
                           decoration: BoxDecoration(
-                            color: filled ? AppTheme.lightPrimary : Colors.transparent,
+                            color: filled
+                                ? AppTheme.lightPrimary
+                                : Colors.transparent,
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: filled ? AppTheme.lightPrimary : AppTheme.lightDivider,
+                              color: filled
+                                  ? AppTheme.lightPrimary
+                                  : AppTheme.lightDivider,
                               width: 2,
                             ),
                           ),
@@ -387,10 +437,13 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                           height: 48,
                           decoration: BoxDecoration(
                             color: AppTheme.lightPrimary,
-                            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                            border: Border.all(color: const Color(0xFF8F3E02), width: 2),
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusMd),
+                            border: Border.all(
+                                color: const Color(0xFF8F3E02), width: 2),
                           ),
-                          child: const Icon(Icons.tv_rounded, color: AppTheme.lightOnPrimary, size: 24),
+                          child: const Icon(Icons.tv_rounded,
+                              color: AppTheme.lightOnPrimary, size: 24),
                         ),
                         const SizedBox(width: AppTheme.spacingMd),
                         Expanded(
@@ -399,17 +452,25 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                             children: [
                               Text(
                                 "TV Episode",
-                                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: AppTheme.lightPrimaryText,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyLarge
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      color: AppTheme.lightPrimaryText,
+                                    ),
                               ),
                               Text(
-                                userTV ? "Added" : "Missing for ${group.currentYear}",
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: AppTheme.lightPrimary,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                userTV
+                                    ? "Added"
+                                    : "Missing for ${group.currentYear}",
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: AppTheme.lightPrimary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                               ),
                             ],
                           ),
@@ -417,7 +478,8 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                         OutlinedButton(
                           onPressed: () => context.push('/add-tv'),
                           style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: AppTheme.lightPrimary),
+                            side:
+                                const BorderSide(color: AppTheme.lightPrimary),
                             foregroundColor: AppTheme.lightPrimary,
                           ),
                           child: Text(userTV ? "VIEW" : "PICK SHOW"),
@@ -427,8 +489,28 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                   ],
                 ),
               ),
-              
+
               const SizedBox(height: AppTheme.spacingMd),
+
+              if (weekId != null) ...[
+                _WeeklyQuizCard(
+                  groupId: group.id,
+                  weekId: weekId,
+                  userId: userProfile.uid,
+                ),
+                const SizedBox(height: AppTheme.spacingMd),
+                _DecadeLeaderboardCard(
+                  groupId: group.id,
+                  decadeStart: group.currentDecadeStart,
+                ),
+                const SizedBox(height: AppTheme.spacingMd),
+                _WeeklyMovieCard(
+                  groupId: group.id,
+                  weekId: weekId,
+                  userId: userProfile.uid,
+                ),
+                const SizedBox(height: AppTheme.spacingMd),
+              ],
 
               // This Week's Episode Card
               Container(
@@ -445,9 +527,9 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                     Text(
                       "This Week's Episode",
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.lightPrimaryText,
-                      ),
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.lightPrimaryText,
+                          ),
                     ),
                     const SizedBox(height: AppTheme.spacingMd),
                     if (episodes.isEmpty)
@@ -455,9 +537,12 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                         children: [
                           Text(
                             "No episode added yet",
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: AppTheme.lightSecondaryText,
-                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: AppTheme.lightSecondaryText,
+                                ),
                           ),
                           const SizedBox(height: AppTheme.spacingSm),
                           OutlinedButton.icon(
@@ -465,7 +550,8 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                             icon: const Icon(Icons.tv_rounded),
                             label: const Text("Add Episode"),
                             style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: AppTheme.lightPrimary),
+                              side: const BorderSide(
+                                  color: AppTheme.lightPrimary),
                               foregroundColor: AppTheme.lightPrimary,
                             ),
                           ),
@@ -483,7 +569,7 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
               const SizedBox(height: AppTheme.spacingMd),
 
               // Advance Year Button
-              if (songs.length >= 7)
+              if (songs.length >= songCap)
                 Container(
                   padding: const EdgeInsets.all(AppTheme.spacingLg),
                   decoration: BoxDecoration(
@@ -493,7 +579,8 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                       end: Alignment.bottomRight,
                     ),
                     borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                    border: Border.all(color: AppTheme.lightOnSurface, width: 3),
+                    border:
+                        Border.all(color: AppTheme.lightOnSurface, width: 3),
                     boxShadow: AppTheme.shadowLg,
                   ),
                   child: Column(
@@ -507,16 +594,16 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                       Text(
                         'Week Complete!',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          color: AppTheme.lightOnPrimary,
-                        ),
+                              fontWeight: FontWeight.w900,
+                              color: AppTheme.lightOnPrimary,
+                            ),
                       ),
                       const SizedBox(height: AppTheme.spacingXs),
                       Text(
                         'Ready to move on?',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppTheme.lightOnPrimary,
-                        ),
+                              color: AppTheme.lightOnPrimary,
+                            ),
                       ),
                       const SizedBox(height: AppTheme.spacingMd),
                       SizedBox(
@@ -534,7 +621,8 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                             foregroundColor: AppTheme.lightOnSurface,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.radiusLg),
                               side: const BorderSide(
                                 color: AppTheme.lightOnSurface,
                                 width: 2,
@@ -564,7 +652,8 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                     ],
                   ),
                 ),
-              if (songs.length >= 7) const SizedBox(height: AppTheme.spacingMd),
+              if (songs.length >= songCap)
+                const SizedBox(height: AppTheme.spacingMd),
 
               // Group Chat Card
               _GroupChatCard(
@@ -582,13 +671,18 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () => context.push('/history'),
-                      icon: const Icon(Icons.history_rounded, color: AppTheme.lightOnSurface),
-                      label: const Text('History', style: TextStyle(color: AppTheme.lightOnSurface)),
+                      icon: const Icon(Icons.history_rounded,
+                          color: AppTheme.lightOnSurface),
+                      label: const Text('History',
+                          style: TextStyle(color: AppTheme.lightOnSurface)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.lightBackground,
                         foregroundColor: AppTheme.lightOnSurface,
-                        side: const BorderSide(color: AppTheme.lightOnSurface, width: 2),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
+                        side: const BorderSide(
+                            color: AppTheme.lightOnSurface, width: 2),
+                        shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusLg)),
                       ),
                     ),
                   ),
@@ -597,12 +691,16 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                     flex: 2,
                     child: ElevatedButton.icon(
                       onPressed: () => context.push('/playlist'),
-                      icon: const Icon(Icons.queue_music_rounded, color: AppTheme.lightOnPrimary),
-                      label: const Text('Open Playlist', style: TextStyle(color: AppTheme.lightOnPrimary)),
+                      icon: const Icon(Icons.queue_music_rounded,
+                          color: AppTheme.lightOnPrimary),
+                      label: const Text('Open Playlist',
+                          style: TextStyle(color: AppTheme.lightOnPrimary)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.lightPrimary,
                         foregroundColor: AppTheme.lightOnPrimary,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusLg)),
                       ),
                     ),
                   ),
@@ -617,22 +715,26 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                   decoration: BoxDecoration(
                     color: AppTheme.lightSecondary,
                     borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                    border: Border.all(color: const Color(0xFF1E7066), width: 2),
+                    border:
+                        Border.all(color: const Color(0xFF1E7066), width: 2),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.auto_awesome_rounded, color: AppTheme.lightOnPrimary, size: 24),
+                      const Icon(Icons.auto_awesome_rounded,
+                          color: AppTheme.lightOnPrimary, size: 24),
                       const SizedBox(width: AppTheme.spacingMd),
                       Expanded(
                         child: Text(
                           "Need help remembering ${group.currentYear}? Ask the Nostalgia Assistant (AI).",
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppTheme.lightOnPrimary,
-                            fontWeight: FontWeight.w500,
-                          ),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: AppTheme.lightOnPrimary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                         ),
                       ),
-                      const Icon(Icons.chevron_right_rounded, color: AppTheme.lightOnPrimary),
+                      const Icon(Icons.chevron_right_rounded,
+                          color: AppTheme.lightOnPrimary),
                     ],
                   ),
                 ),
@@ -647,34 +749,34 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
                   Text(
                     "Friend Activity",
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: AppTheme.lightPrimaryText,
-                    ),
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.lightPrimaryText,
+                        ),
                   ),
                   Text(
                     "See All",
                     style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: AppTheme.lightSecondary,
-                      fontWeight: FontWeight.w700,
-                    ),
+                          color: AppTheme.lightSecondary,
+                          fontWeight: FontWeight.w700,
+                        ),
                   ),
                 ],
               ),
               const SizedBox(height: AppTheme.spacingMd),
               // Live activity feed from real songs/episodes
               ...songs.take(3).map((song) => _ActivityItem(
-                displayName: song.addedByName,
-                action: 'added a track',
-                title: '${song.title} - ${song.artist}',
-                type: 'music',
-              )),
+                    displayName: song.addedByName,
+                    action: 'added a track',
+                    title: '${song.title} - ${song.artist}',
+                    type: 'music',
+                  )),
               ...episodes.take(2).map((episode) => _ActivityItem(
-                displayName: episode.addedByName,
-                action: 'picked a show',
-                title: '${episode.showTitle} - ${episode.episodeTitle}',
-                type: 'tv',
-              )),
-              
+                    displayName: episode.addedByName,
+                    action: 'picked a show',
+                    title: '${episode.showTitle} - ${episode.episodeTitle}',
+                    type: 'tv',
+                  )),
+
               const SizedBox(height: 80), // Fab spacing
             ],
           ),
@@ -686,6 +788,310 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
         foregroundColor: AppTheme.lightOnPrimary,
         icon: const Icon(Icons.group_add_rounded),
         label: const Text("Invite Friends"),
+      ),
+    );
+  }
+}
+
+class _WeeklyQuizCard extends StatelessWidget {
+  final String groupId;
+  final String weekId;
+  final String userId;
+
+  const _WeeklyQuizCard({
+    required this.groupId,
+    required this.weekId,
+    required this.userId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final firestoreService = FirestoreService();
+
+    return Container(
+      padding: const EdgeInsets.all(AppTheme.spacingLg),
+      decoration: BoxDecoration(
+        color: AppTheme.lightBackground,
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        border: Border.all(color: AppTheme.lightOnSurface, width: 3),
+        boxShadow: AppTheme.shadowMd,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          StreamBuilder<QuizScore?>(
+            stream:
+                firestoreService.listenToUserQuizScore(groupId, weekId, userId),
+            builder: (context, snapshot) {
+              final hasTakenQuiz = snapshot.data != null;
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Weekly Quiz",
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  color: AppTheme.lightPrimaryText,
+                                ),
+                      ),
+                      if (hasTakenQuiz)
+                        Text(
+                          "You scored ${snapshot.data!.score}/20",
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppTheme.lightSecondaryText,
+                                  ),
+                        ),
+                    ],
+                  ),
+                  ElevatedButton(
+                    onPressed: () => context.push('/weekly-quiz'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.lightSecondary,
+                      foregroundColor: AppTheme.lightOnPrimary,
+                    ),
+                    child:
+                        Text(hasTakenQuiz ? 'View Leaderboard' : 'Take Quiz'),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: AppTheme.spacingMd),
+          StreamBuilder<List<QuizScore>>(
+            stream: firestoreService.listenToLeaderboard(groupId, weekId),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final scores = snapshot.data ?? [];
+              if (scores.isEmpty) {
+                return Text(
+                  "No scores yet this week.",
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.lightSecondaryText,
+                      ),
+                );
+              }
+
+              return Column(
+                children: scores.take(10).toList().asMap().entries.map((entry) {
+                  final rank = entry.key + 1;
+                  final score = entry.value;
+                  return ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Text('#$rank',
+                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                    title: Text(
+                      score.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: Text(
+                      '${score.score}',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeeklyMovieCard extends StatelessWidget {
+  final String groupId;
+  final String weekId;
+  final String userId;
+
+  const _WeeklyMovieCard({
+    required this.groupId,
+    required this.weekId,
+    required this.userId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final firestoreService = FirestoreService();
+    return Container(
+      padding: const EdgeInsets.all(AppTheme.spacingLg),
+      decoration: BoxDecoration(
+        color: AppTheme.lightBackground,
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        border: Border.all(color: AppTheme.lightOnSurface, width: 3),
+        boxShadow: AppTheme.shadowMd,
+      ),
+      child: StreamBuilder<List<Movie>>(
+        stream: firestoreService.streamMovies(groupId, weekId),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final movies = snapshot.data ?? [];
+          Movie? myPick;
+          for (final movie in movies) {
+            if (movie.addedByUid == userId) {
+              myPick = movie;
+              break;
+            }
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Weekly Movie Pick",
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.lightPrimaryText,
+                    ),
+              ),
+              const SizedBox(height: AppTheme.spacingSm),
+              Text(
+                myPick != null
+                    ? "You picked: ${myPick.title}"
+                    : "You haven't picked a movie yet",
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppTheme.lightSecondaryText,
+                    ),
+              ),
+              const SizedBox(height: AppTheme.spacingMd),
+              Row(
+                children: [
+                  if (myPick == null)
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => context.push('/add-movie'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.lightSecondary,
+                          foregroundColor: AppTheme.lightOnPrimary,
+                        ),
+                        child: const Text('Pick Movie'),
+                      ),
+                    ),
+                  if (myPick == null) const SizedBox(width: AppTheme.spacingMd),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => context.push('/movies'),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppTheme.lightPrimary),
+                        foregroundColor: AppTheme.lightPrimary,
+                      ),
+                      child: const Text('View Picks'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _DecadeLeaderboardCard extends StatelessWidget {
+  final String groupId;
+  final int decadeStart;
+
+  const _DecadeLeaderboardCard({
+    required this.groupId,
+    required this.decadeStart,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final firestoreService = FirestoreService();
+
+    return Container(
+      padding: const EdgeInsets.all(AppTheme.spacingLg),
+      decoration: BoxDecoration(
+        color: AppTheme.lightBackground,
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        border: Border.all(color: AppTheme.lightOnSurface, width: 3),
+        boxShadow: AppTheme.shadowMd,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Decade Race (${decadeStart}s)",
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.lightPrimaryText,
+                ),
+          ),
+          const SizedBox(height: AppTheme.spacingSm),
+          StreamBuilder<DecadeWinner?>(
+            stream: firestoreService.listenToLatestDecadeWinner(groupId),
+            builder: (context, winnerSnapshot) {
+              final winner = winnerSnapshot.data;
+              if (winner == null) return const SizedBox.shrink();
+              return Text(
+                "Last decade winner (${winner.decadeStart}s): ${winner.displayName} (${winner.points} pts)",
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppTheme.lightSecondaryText,
+                      fontWeight: FontWeight.w600,
+                    ),
+              );
+            },
+          ),
+          const SizedBox(height: AppTheme.spacingMd),
+          StreamBuilder<List<DecadeScore>>(
+            stream: firestoreService.listenToDecadeLeaderboard(
+                groupId, decadeStart),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final scores = snapshot.data ?? [];
+              if (scores.isEmpty) {
+                return Text(
+                  "No decade points yet. Take this week's quiz to start.",
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.lightSecondaryText,
+                      ),
+                );
+              }
+
+              return Column(
+                children: scores.take(10).toList().asMap().entries.map((entry) {
+                  final rank = entry.key + 1;
+                  final score = entry.value;
+                  return ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Text('#$rank',
+                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                    title: Text(
+                      score.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      "${score.weeklyWins} weekly wins • ${score.weeksPlayed} weeks",
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    trailing: Text(
+                      "${score.points}",
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -705,14 +1111,14 @@ class _ThisWeekEpisodeCard extends StatefulWidget {
 }
 
 class _ThisWeekEpisodeCardState extends State<_ThisWeekEpisodeCard> {
-
   Future<void> _confirmDelete() async {
     final provider = context.read<NostalgiaProvider>();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Delete Episode?"),
-        content: const Text("Delete this episode? This removes it for the whole group."),
+        content: const Text(
+            "Delete this episode? This removes it for the whole group."),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -731,7 +1137,8 @@ class _ThisWeekEpisodeCardState extends State<_ThisWeekEpisodeCard> {
       final weekId = provider.currentWeekId;
       if (groupId != null && weekId != null) {
         try {
-          await FirestoreService().deleteEpisode(groupId, weekId, widget.episode.id);
+          await FirestoreService()
+              .deleteEpisode(groupId, weekId, widget.episode.id);
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text("Episode deleted")),
@@ -754,7 +1161,8 @@ class _ThisWeekEpisodeCardState extends State<_ThisWeekEpisodeCard> {
     final weekId = provider.currentWeekId;
     if (groupId != null && weekId != null) {
       try {
-        await FirestoreService().deleteEpisode(groupId, weekId, widget.episode.id);
+        await FirestoreService()
+            .deleteEpisode(groupId, weekId, widget.episode.id);
         if (mounted) {
           context.push('/add-tv');
         }
@@ -802,14 +1210,16 @@ class _ThisWeekEpisodeCardState extends State<_ThisWeekEpisodeCard> {
                           width: 100,
                           height: 75,
                           color: AppTheme.lightPrimary,
-                          child: const Icon(Icons.tv, color: AppTheme.lightOnPrimary),
+                          child: const Icon(Icons.tv,
+                              color: AppTheme.lightOnPrimary),
                         ),
                       )
                     : Container(
                         width: 100,
                         height: 75,
                         color: AppTheme.lightPrimary,
-                        child: const Icon(Icons.tv, color: AppTheme.lightOnPrimary),
+                        child: const Icon(Icons.tv,
+                            color: AppTheme.lightOnPrimary),
                       ),
               ),
               Expanded(
@@ -821,17 +1231,17 @@ class _ThisWeekEpisodeCardState extends State<_ThisWeekEpisodeCard> {
                       Text(
                         widget.episode.showTitle,
                         style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.lightPrimaryText,
-                        ),
+                              fontWeight: FontWeight.w800,
+                              color: AppTheme.lightPrimaryText,
+                            ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
                         widget.episode.episodeTitle,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppTheme.lightSecondaryText,
-                        ),
+                              color: AppTheme.lightSecondaryText,
+                            ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -846,7 +1256,8 @@ class _ThisWeekEpisodeCardState extends State<_ThisWeekEpisodeCard> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.lightPrimary,
                     foregroundColor: AppTheme.lightOnPrimary,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
                   child: const Text("Open"),
                 ),
@@ -856,7 +1267,8 @@ class _ThisWeekEpisodeCardState extends State<_ThisWeekEpisodeCard> {
           if (canDelete) ...[
             const Divider(height: 1, color: AppTheme.lightDivider),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingSm, vertical: AppTheme.spacingXs),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppTheme.spacingSm, vertical: AppTheme.spacingXs),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -866,7 +1278,8 @@ class _ThisWeekEpisodeCardState extends State<_ThisWeekEpisodeCard> {
                     label: const Text("Replace"),
                     style: TextButton.styleFrom(
                       foregroundColor: AppTheme.lightSecondary,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                     ),
                   ),
                   const SizedBox(width: AppTheme.spacingXs),
@@ -876,7 +1289,8 @@ class _ThisWeekEpisodeCardState extends State<_ThisWeekEpisodeCard> {
                     label: const Text("Delete"),
                     style: TextButton.styleFrom(
                       foregroundColor: Colors.red,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                     ),
                   ),
                 ],
@@ -904,10 +1318,11 @@ class _ActivityItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final initials = displayName.isNotEmpty 
-        ? displayName.substring(0, 1).toUpperCase() 
+    final initials = displayName.isNotEmpty
+        ? displayName.substring(0, 1).toUpperCase()
         : 'U';
-    final color = type == 'music' ? AppTheme.lightSecondary : AppTheme.lightPrimary;
+    final color =
+        type == 'music' ? AppTheme.lightSecondary : AppTheme.lightPrimary;
 
     return Container(
       margin: const EdgeInsets.only(bottom: AppTheme.spacingMd),
@@ -947,25 +1362,25 @@ class _ActivityItem extends StatelessWidget {
                     Text(
                       displayName,
                       style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.lightPrimaryText,
-                      ),
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.lightPrimaryText,
+                          ),
                     ),
                     const SizedBox(width: 4),
                     Text(
                       action,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppTheme.lightSecondaryText,
-                      ),
+                            color: AppTheme.lightSecondaryText,
+                          ),
                     ),
                   ],
                 ),
                 Text(
                   title,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.lightPrimaryText,
-                  ),
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.lightPrimaryText,
+                      ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1025,9 +1440,9 @@ class _GroupChatCard extends StatelessWidget {
               Text(
                 "Crew Chat",
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.lightPrimaryText,
-                ),
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.lightPrimaryText,
+                    ),
               ),
               OutlinedButton.icon(
                 onPressed: () => context.push('/crew-chat'),
@@ -1036,7 +1451,8 @@ class _GroupChatCard extends StatelessWidget {
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: AppTheme.lightSecondary),
                   foregroundColor: AppTheme.lightSecondary,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
               ),
             ],
@@ -1063,9 +1479,9 @@ class _GroupChatCard extends StatelessWidget {
                     child: Text(
                       "Say hello to the crew…",
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppTheme.lightSecondaryText,
-                        fontStyle: FontStyle.italic,
-                      ),
+                            color: AppTheme.lightSecondaryText,
+                            fontStyle: FontStyle.italic,
+                          ),
                     ),
                   );
                 }
@@ -1076,26 +1492,32 @@ class _GroupChatCard extends StatelessWidget {
                   itemBuilder: (context, index) {
                     final message = messages[index];
                     final isCurrentUser = message.senderUid == currentUserUid;
-                    final displayName = isCurrentUser ? 'You' : message.senderName;
+                    final displayName =
+                        isCurrentUser ? 'You' : message.senderName;
 
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: AppTheme.spacingSm),
+                      padding:
+                          const EdgeInsets.only(bottom: AppTheme.spacingSm),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             displayName,
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.lightPrimary,
-                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: AppTheme.lightPrimary,
+                                ),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             message.text,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppTheme.lightPrimaryText,
-                            ),
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: AppTheme.lightPrimaryText,
+                                    ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -1113,19 +1535,26 @@ class _GroupChatCard extends StatelessWidget {
               Expanded(
                 child: TextField(
                   controller: chatController,
+                  style: const TextStyle(color: AppTheme.lightPrimaryText),
+                  cursorColor: AppTheme.lightPrimaryText,
                   decoration: InputDecoration(
                     hintText: 'Type a message...',
+                    hintStyle:
+                        const TextStyle(color: AppTheme.lightSecondaryText),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                      borderSide: const BorderSide(color: AppTheme.lightDivider, width: 2),
+                      borderSide: const BorderSide(
+                          color: AppTheme.lightDivider, width: 2),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                      borderSide: const BorderSide(color: AppTheme.lightDivider, width: 2),
+                      borderSide: const BorderSide(
+                          color: AppTheme.lightDivider, width: 2),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                      borderSide: const BorderSide(color: AppTheme.lightSecondary, width: 2),
+                      borderSide: const BorderSide(
+                          color: AppTheme.lightSecondary, width: 2),
                     ),
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: AppTheme.spacingMd,
@@ -1141,10 +1570,14 @@ class _GroupChatCard extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: isSending ? AppTheme.lightDivider : AppTheme.lightSecondary,
+                    color: isSending
+                        ? AppTheme.lightDivider
+                        : AppTheme.lightSecondary,
                     borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                     border: Border.all(
-                      color: isSending ? AppTheme.lightDivider : const Color(0xFF1E7066),
+                      color: isSending
+                          ? AppTheme.lightDivider
+                          : const Color(0xFF1E7066),
                       width: 2,
                     ),
                   ),
@@ -1154,7 +1587,8 @@ class _GroupChatCard extends StatelessWidget {
                           height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(AppTheme.lightOnPrimary),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                AppTheme.lightOnPrimary),
                           ),
                         )
                       : const Icon(

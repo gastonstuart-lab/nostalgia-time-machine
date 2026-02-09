@@ -21,10 +21,22 @@ class _AddTVEpisodeScreenState extends State<AddTVEpisodeScreen> {
   bool _isSearching = false;
   String? _errorMessage;
 
+  int _getUserEpisodeCount(NostalgiaProvider provider) {
+    final uid = provider.currentUserProfile?.uid;
+    if (uid == null) return provider.episodes.length;
+    return provider.episodes
+        .where((episode) => episode.addedByUid == uid)
+        .length;
+  }
+
+  int _getEpisodeCap(NostalgiaProvider provider) {
+    return provider.currentGroup?.episodeCapPerUser ?? 1;
+  }
+
   Future<void> _search([String? queryOverride]) async {
     final query = (queryOverride ?? _searchController.text).trim();
     if (query.isEmpty) return;
-    
+
     setState(() {
       _isSearching = true;
       _errorMessage = null;
@@ -69,17 +81,18 @@ class _AddTVEpisodeScreenState extends State<AddTVEpisodeScreen> {
 
   Future<void> _addEpisode(YouTubeSearchResult result) async {
     final provider = context.read<NostalgiaProvider>();
-    final episodes = provider.episodes;
+    final userEpisodeCount = _getUserEpisodeCount(provider);
+    final episodeCap = _getEpisodeCap(provider);
 
     // Check limit before attempting
-    if (episodes.length >= 1) {
+    if (userEpisodeCount >= episodeCap) {
       if (!mounted) return;
-      _showLimitDialog();
+      _showLimitDialog(episodeCap: episodeCap);
       return;
     }
 
     final youtubeUrl = 'https://www.youtube.com/watch?v=${result.videoId}';
-    
+
     final success = await provider.addEpisode(
       showTitle: result.title,
       episodeTitle: result.channelTitle,
@@ -95,13 +108,19 @@ class _AddTVEpisodeScreenState extends State<AddTVEpisodeScreen> {
       );
       context.pop();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to add episode. Please try again.")),
-      );
+      final refreshedCount = _getUserEpisodeCount(provider);
+      if (refreshedCount >= episodeCap) {
+        _showLimitDialog(episodeCap: episodeCap);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text("Failed to add episode. Please try again.")),
+        );
+      }
     }
   }
 
-  void _showLimitDialog() {
+  void _showLimitDialog({required int episodeCap}) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -114,11 +133,12 @@ class _AddTVEpisodeScreenState extends State<AddTVEpisodeScreen> {
           children: [
             Icon(Icons.error_outline, color: Colors.red, size: 28),
             SizedBox(width: 8),
-            Text('Episode Limit', style: TextStyle(fontWeight: FontWeight.w900)),
+            Text('Episode Limit',
+                style: TextStyle(fontWeight: FontWeight.w900)),
           ],
         ),
-        content: const Text(
-          'This week already has an episode. Replace it from the dashboard.',
+        content: Text(
+          'You have reached your weekly cap ($episodeCap/$episodeCap episodes).',
           style: TextStyle(color: AppTheme.lightPrimaryText),
         ),
         actions: [
@@ -127,7 +147,8 @@ class _AddTVEpisodeScreenState extends State<AddTVEpisodeScreen> {
               Navigator.of(context).pop();
               context.pop();
             },
-            child: const Text('Go to Dashboard', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text('Go to Dashboard',
+                style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -138,20 +159,29 @@ class _AddTVEpisodeScreenState extends State<AddTVEpisodeScreen> {
   Widget build(BuildContext context) {
     final provider = context.watch<NostalgiaProvider>();
     final group = provider.currentGroup;
-    final episodes = provider.episodes;
+    final userEpisodeCount = _getUserEpisodeCount(provider);
+    final episodeCap = _getEpisodeCap(provider);
     final year = group?.currentYear ?? 1990;
 
     return Scaffold(
       backgroundColor: AppTheme.lightBackground,
       appBar: AppBar(
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Theme.of(context).iconTheme.color),
+          icon:
+              Icon(Icons.arrow_back, color: Theme.of(context).iconTheme.color),
           onPressed: () => context.pop(),
         ),
         title: Column(
           children: [
-            Text("TV TIME MACHINE", style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w900)),
-            Text("THE ${year}s", style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold)),
+            Text("TV TIME MACHINE",
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w900)),
+            Text("THE ${year}s",
+                style: Theme.of(context)
+                    .textTheme
+                    .labelLarge
+                    ?.copyWith(fontWeight: FontWeight.bold)),
           ],
         ),
         actions: const [
@@ -182,9 +212,11 @@ class _AddTVEpisodeScreenState extends State<AddTVEpisodeScreen> {
                       decoration: BoxDecoration(
                         color: AppTheme.lightOnPrimary,
                         shape: BoxShape.circle,
-                        border: Border.all(color: AppTheme.lightOnSurface, width: 2),
+                        border: Border.all(
+                            color: AppTheme.lightOnSurface, width: 2),
                       ),
-                      child: const Icon(Icons.auto_awesome_rounded, color: AppTheme.lightPrimary, size: 24),
+                      child: const Icon(Icons.auto_awesome_rounded,
+                          color: AppTheme.lightPrimary, size: 24),
                     ),
                     const SizedBox(width: AppTheme.spacingMd),
                     Expanded(
@@ -193,16 +225,22 @@ class _AddTVEpisodeScreenState extends State<AddTVEpisodeScreen> {
                         children: [
                           Text(
                             "Nostalgia Assistant",
-                            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                              color: AppTheme.lightOnPrimary,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelLarge
+                                ?.copyWith(
+                                  color: AppTheme.lightOnPrimary,
+                                  fontWeight: FontWeight.bold,
+                                ),
                           ),
                           Text(
                             "Want to see the top sitcoms from $year?",
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: AppTheme.lightOnPrimary,
-                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: AppTheme.lightOnPrimary,
+                                ),
                           ),
                         ],
                       ),
@@ -212,7 +250,8 @@ class _AddTVEpisodeScreenState extends State<AddTVEpisodeScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.lightAccent,
                         foregroundColor: AppTheme.lightOnSurface,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
                       ),
                       child: const Text("Suggest"),
                     ),
@@ -223,10 +262,14 @@ class _AddTVEpisodeScreenState extends State<AddTVEpisodeScreen> {
               const SizedBox(height: AppTheme.spacingLg),
 
               // Search
-              Text("Search YouTube for an episode", style: Theme.of(context).textTheme.titleSmall?.copyWith(color: AppTheme.lightOnSurface, fontWeight: FontWeight.bold)),
+              Text("Search YouTube for an episode",
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: AppTheme.lightOnSurface,
+                      fontWeight: FontWeight.bold)),
               const SizedBox(height: AppTheme.spacingSm),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingMd, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppTheme.spacingMd, vertical: 4),
                 decoration: BoxDecoration(
                   color: AppTheme.lightSurface,
                   borderRadius: BorderRadius.circular(AppTheme.radiusMd),
@@ -234,7 +277,8 @@ class _AddTVEpisodeScreenState extends State<AddTVEpisodeScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.search_rounded, color: AppTheme.lightOnSurface),
+                    const Icon(Icons.search_rounded,
+                        color: AppTheme.lightOnSurface),
                     const SizedBox(width: AppTheme.spacingMd),
                     Expanded(
                       child: TextField(
@@ -250,7 +294,8 @@ class _AddTVEpisodeScreenState extends State<AddTVEpisodeScreen> {
                     ),
                     GestureDetector(
                       onTap: _search,
-                      child: const Icon(Icons.arrow_forward_rounded, color: AppTheme.lightOnSurface),
+                      child: const Icon(Icons.arrow_forward_rounded,
+                          color: AppTheme.lightOnSurface),
                     ),
                   ],
                 ),
@@ -263,10 +308,22 @@ class _AddTVEpisodeScreenState extends State<AddTVEpisodeScreen> {
                 spacing: AppTheme.spacingSm,
                 runSpacing: AppTheme.spacingSm,
                 children: [
-                  _SuggestionChip(icon: Icons.theater_comedy_rounded, label: "Sitcoms", onTap: () => _handleChipTap("Sitcoms")),
-                  _SuggestionChip(icon: Icons.travel_explore_rounded, label: "Sci-Fi", onTap: () => _handleChipTap("Sci-Fi")),
-                  _SuggestionChip(icon: Icons.child_care_rounded, label: "Cartoons", onTap: () => _handleChipTap("Cartoons")),
-                  _SuggestionChip(icon: Icons.menu_book_rounded, label: "Drama", onTap: () => _handleChipTap("Drama")),
+                  _SuggestionChip(
+                      icon: Icons.theater_comedy_rounded,
+                      label: "Sitcoms",
+                      onTap: () => _handleChipTap("Sitcoms")),
+                  _SuggestionChip(
+                      icon: Icons.travel_explore_rounded,
+                      label: "Sci-Fi",
+                      onTap: () => _handleChipTap("Sci-Fi")),
+                  _SuggestionChip(
+                      icon: Icons.child_care_rounded,
+                      label: "Cartoons",
+                      onTap: () => _handleChipTap("Cartoons")),
+                  _SuggestionChip(
+                      icon: Icons.menu_book_rounded,
+                      label: "Drama",
+                      onTap: () => _handleChipTap("Drama")),
                 ],
               ),
 
@@ -278,7 +335,10 @@ class _AddTVEpisodeScreenState extends State<AddTVEpisodeScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                   Text("Search Results", style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900, color: AppTheme.lightOnSurface)),
+                  Text("Search Results",
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                          color: AppTheme.lightOnSurface)),
                 ],
               ),
               const SizedBox(height: AppTheme.spacingMd),
@@ -299,7 +359,8 @@ class _AddTVEpisodeScreenState extends State<AddTVEpisodeScreen> {
                       Expanded(
                         child: Text(
                           _errorMessage!,
-                          style: const TextStyle(color: Colors.red, fontSize: 12),
+                          style:
+                              const TextStyle(color: Colors.red, fontSize: 12),
                         ),
                       ),
                     ],
@@ -310,17 +371,20 @@ class _AddTVEpisodeScreenState extends State<AddTVEpisodeScreen> {
                 const Center(child: CircularProgressIndicator())
               else if (_results.isNotEmpty)
                 ..._results.map((result) => _TVResultCard(
-                  result: result,
-                  onAdd: () => _addEpisode(result),
-                  isDisabled: episodes.length >= 1,
-                ))
+                      result: result,
+                      onAdd: () => _addEpisode(result),
+                      isDisabled: userEpisodeCount >= episodeCap,
+                    ))
               else
-                 Center(
+                Center(
                   child: Padding(
                     padding: const EdgeInsets.all(AppTheme.spacingXl),
                     child: Text(
                       "Search for TV shows from $year!",
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.lightSecondaryText),
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: AppTheme.lightSecondaryText),
                     ),
                   ),
                 ),
@@ -337,7 +401,8 @@ class _SuggestionChip extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
 
-  const _SuggestionChip({required this.icon, required this.label, required this.onTap});
+  const _SuggestionChip(
+      {required this.icon, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -355,7 +420,10 @@ class _SuggestionChip extends StatelessWidget {
           children: [
             Icon(icon, size: 18, color: AppTheme.lightPrimary),
             const SizedBox(width: 8),
-            Text(label, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: AppTheme.lightPrimaryText, fontWeight: FontWeight.bold)),
+            Text(label,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: AppTheme.lightPrimaryText,
+                    fontWeight: FontWeight.bold)),
           ],
         ),
       ),
@@ -401,14 +469,16 @@ class _TVResultCard extends StatelessWidget {
                       width: 120,
                       height: 90,
                       color: AppTheme.lightSecondary,
-                      child: const Icon(Icons.tv, color: AppTheme.lightOnPrimary, size: 40),
+                      child: const Icon(Icons.tv,
+                          color: AppTheme.lightOnPrimary, size: 40),
                     ),
                   )
                 : Container(
                     width: 120,
                     height: 90,
                     color: AppTheme.lightSecondary,
-                    child: const Icon(Icons.tv, color: AppTheme.lightOnPrimary, size: 40),
+                    child: const Icon(Icons.tv,
+                        color: AppTheme.lightOnPrimary, size: 40),
                   ),
           ),
           Expanded(
@@ -429,12 +499,16 @@ class _TVResultCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Icon(Icons.person, size: 12, color: AppTheme.lightSecondaryText),
+                      const Icon(Icons.person,
+                          size: 12, color: AppTheme.lightSecondaryText),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           result.channelTitle,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.lightSecondaryText),
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: AppTheme.lightSecondaryText),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),

@@ -13,7 +13,8 @@ class NostalgiaAssistantScreen extends StatefulWidget {
   const NostalgiaAssistantScreen({super.key});
 
   @override
-  State<NostalgiaAssistantScreen> createState() => _NostalgiaAssistantScreenState();
+  State<NostalgiaAssistantScreen> createState() =>
+      _NostalgiaAssistantScreenState();
 }
 
 class _NostalgiaAssistantScreenState extends State<NostalgiaAssistantScreen> {
@@ -21,7 +22,7 @@ class _NostalgiaAssistantScreenState extends State<NostalgiaAssistantScreen> {
   final ScrollController _scrollController = ScrollController();
   final FirestoreService _firestoreService = FirestoreService();
   final ChatService _chatService = ChatService();
-  
+
   String? _sessionId;
   StreamSubscription<List<ChatMessage>>? _messagesSubscription;
   List<ChatMessage> _messages = [];
@@ -38,7 +39,7 @@ class _NostalgiaAssistantScreenState extends State<NostalgiaAssistantScreen> {
     final provider = context.read<NostalgiaProvider>();
     final groupId = provider.currentGroup?.id;
     final userUid = provider.currentUserId;
-    
+
     if (groupId == null) {
       debugPrint('❌ No active group');
       setState(() => _isInitializing = false);
@@ -47,7 +48,8 @@ class _NostalgiaAssistantScreenState extends State<NostalgiaAssistantScreen> {
 
     try {
       // STEP 2: Ensure default session exists on screen load
-      final sessionId = await _firestoreService.getOrCreateChatSession(groupId, createdByUid: userUid);
+      final sessionId = await _firestoreService.getOrCreateChatSession(groupId,
+          createdByUid: userUid);
       setState(() => _sessionId = sessionId);
 
       // Listen to messages in real-time
@@ -67,7 +69,8 @@ class _NostalgiaAssistantScreenState extends State<NostalgiaAssistantScreen> {
         await _firestoreService.addChatMessage(
           groupId: groupId,
           sessionId: sessionId,
-          text: "Hey there! I'm your time-traveling guide for $year. Need help finding that perfect song or classic TV episode?",
+          text:
+              "Hey there! I'm your time-traveling guide for $year. Need help finding that perfect song or classic TV episode?",
           senderType: 'assistant',
         );
       }
@@ -123,7 +126,7 @@ class _NostalgiaAssistantScreenState extends State<NostalgiaAssistantScreen> {
     try {
       // STEP 3: Use default session and ensure it exists
       const sessionId = 'default';
-      
+
       // Write user message to Firestore (session will be auto-created if missing)
       await _firestoreService.addChatMessage(
         groupId: groupId,
@@ -141,14 +144,16 @@ class _NostalgiaAssistantScreenState extends State<NostalgiaAssistantScreen> {
 
       _scrollToBottom();
 
-      // Process message and generate AI response (non-blocking)
-      _chatService.processUserMessage(
+      // Process message and wait for assistant response so loading state is accurate.
+      await _chatService
+          .processUserMessage(
         groupId: groupId,
         sessionId: sessionId,
         userMessage: userMessage,
         userUid: userUid,
         year: year,
-      ).catchError((e) {
+      )
+          .catchError((e) {
         debugPrint('❌ AI response failed: $e');
         _showError('AI assistant is temporarily unavailable.');
       });
@@ -161,7 +166,8 @@ class _NostalgiaAssistantScreenState extends State<NostalgiaAssistantScreen> {
   }
 
   String _formatTime(DateTime time) {
-    final hour = time.hour > 12 ? time.hour - 12 : (time.hour == 0 ? 12 : time.hour);
+    final hour =
+        time.hour > 12 ? time.hour - 12 : (time.hour == 0 ? 12 : time.hour);
     final minute = time.minute.toString().padLeft(2, '0');
     final period = time.hour >= 12 ? 'PM' : 'AM';
     return "$hour:$minute $period";
@@ -190,13 +196,24 @@ class _NostalgiaAssistantScreenState extends State<NostalgiaAssistantScreen> {
         backgroundColor: AppTheme.lightPrimary,
         title: Column(
           children: [
-            Text("Nostalgia Assistant", style: Theme.of(context).textTheme.titleLarge?.copyWith(color: AppTheme.lightOnPrimary, fontWeight: FontWeight.bold)),
+            Text("Nostalgia Assistant",
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: AppTheme.lightOnPrimary,
+                    fontWeight: FontWeight.bold)),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppTheme.lightSuccess, shape: BoxShape.circle)),
+                Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                        color: AppTheme.lightSuccess, shape: BoxShape.circle)),
                 const SizedBox(width: 4),
-                Text("Online: $year Mode", style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppTheme.lightOnPrimary)),
+                Text("Online: $year Mode",
+                    style: Theme.of(context)
+                        .textTheme
+                        .labelSmall
+                        ?.copyWith(color: AppTheme.lightOnPrimary)),
               ],
             ),
           ],
@@ -213,21 +230,25 @@ class _NostalgiaAssistantScreenState extends State<NostalgiaAssistantScreen> {
                       padding: const EdgeInsets.all(AppTheme.spacingLg),
                       children: [
                         _TriviaCard(
-                          fact: "The Lion King was the highest-grossing film of $year, and the Sony PlayStation was first released in Japan!",
+                          fact:
+                              "The Lion King was the highest-grossing film of $year, and the Sony PlayStation was first released in Japan!",
                         ),
                         ..._messages.map((msg) => _ChatBubble(
-                          message: msg,
-                          formatTime: _formatTime,
-                          onCopy: () {
-                            Clipboard.setData(ClipboardData(text: msg.text));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Copied message')),
-                            );
-                          },
-                        )),
+                              message: msg,
+                              formatTime: _formatTime,
+                              onCopy: () {
+                                Clipboard.setData(
+                                    ClipboardData(text: msg.text));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text('Copied message')),
+                                );
+                              },
+                            )),
                         if (_isSending)
                           Container(
-                            margin: const EdgeInsets.only(bottom: AppTheme.spacingLg),
+                            margin: const EdgeInsets.only(
+                                bottom: AppTheme.spacingLg),
                             child: Row(
                               children: [
                                 Container(
@@ -237,20 +258,37 @@ class _NostalgiaAssistantScreenState extends State<NostalgiaAssistantScreen> {
                                     color: AppTheme.lightAccent,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: const Center(child: Text("AI", style: TextStyle(fontWeight: FontWeight.bold))),
+                                  child: const Center(
+                                      child: Text("AI",
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.bold))),
                                 ),
                                 const SizedBox(width: AppTheme.spacingMd),
                                 Container(
-                                  padding: const EdgeInsets.all(AppTheme.spacingMd),
+                                  padding:
+                                      const EdgeInsets.all(AppTheme.spacingMd),
                                   decoration: BoxDecoration(
                                     color: AppTheme.lightSurface,
-                                    borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                                    border: Border.all(color: AppTheme.lightDivider, width: 2),
+                                    borderRadius: BorderRadius.circular(
+                                        AppTheme.radiusLg),
+                                    border: Border.all(
+                                        color: AppTheme.lightDivider, width: 2),
                                   ),
-                                  child: const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: SizedBox(
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2),
+                                        ),
+                                        const SizedBox(
+                                            width: AppTheme.spacingSm),
+                                        const Text('Thinking...'),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ],
@@ -265,29 +303,43 @@ class _NostalgiaAssistantScreenState extends State<NostalgiaAssistantScreen> {
                     padding: const EdgeInsets.all(AppTheme.spacingLg),
                     decoration: const BoxDecoration(
                       color: AppTheme.lightSurface,
-                      borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
-                      border: Border(top: BorderSide(color: AppTheme.lightDivider, width: 3)),
+                      borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(24),
+                          topRight: Radius.circular(24)),
+                      border: Border(
+                          top: BorderSide(
+                              color: AppTheme.lightDivider, width: 3)),
                     ),
                     child: Row(
                       children: [
                         Expanded(
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingMd),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: AppTheme.spacingMd),
                             decoration: BoxDecoration(
                               color: AppTheme.lightBackground,
-                              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                              border: Border.all(color: AppTheme.lightDivider, width: 2),
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.radiusMd),
+                              border: Border.all(
+                                  color: AppTheme.lightDivider, width: 2),
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.psychology, color: AppTheme.lightSecondaryText, size: 20),
+                                const Icon(Icons.psychology,
+                                    color: AppTheme.lightSecondaryText,
+                                    size: 20),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: TextField(
                                     controller: _controller,
                                     enabled: !_isSending,
+                                    style: const TextStyle(
+                                        color: AppTheme.lightPrimaryText),
+                                    cursorColor: AppTheme.lightPrimaryText,
                                     decoration: InputDecoration(
                                       hintText: "Ask about $year...",
+                                      hintStyle: const TextStyle(
+                                          color: AppTheme.lightSecondaryText),
                                       border: InputBorder.none,
                                       enabledBorder: InputBorder.none,
                                       focusedBorder: InputBorder.none,
@@ -306,11 +358,22 @@ class _NostalgiaAssistantScreenState extends State<NostalgiaAssistantScreen> {
                             width: 48,
                             height: 48,
                             decoration: BoxDecoration(
-                              color: _isSending ? AppTheme.lightDivider : AppTheme.lightAccent,
-                              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                              border: Border.all(color: _isSending ? AppTheme.lightDivider : const Color(0xFFB47B1A), width: 2),
+                              color: _isSending
+                                  ? AppTheme.lightDivider
+                                  : AppTheme.lightAccent,
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.radiusMd),
+                              border: Border.all(
+                                  color: _isSending
+                                      ? AppTheme.lightDivider
+                                      : const Color(0xFFB47B1A),
+                                  width: 2),
                             ),
-                            child: Icon(Icons.send_rounded, color: _isSending ? AppTheme.lightSecondaryText : AppTheme.lightOnSurface, size: 24),
+                            child: Icon(Icons.send_rounded,
+                                color: _isSending
+                                    ? AppTheme.lightSecondaryText
+                                    : AppTheme.lightOnSurface,
+                                size: 24),
                           ),
                         ),
                       ],
@@ -337,11 +400,12 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUser = message.senderType == 'user';
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: AppTheme.spacingLg),
       child: Row(
-        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment:
+            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!isUser) ...[
@@ -352,23 +416,30 @@ class _ChatBubble extends StatelessWidget {
                 color: AppTheme.lightAccent,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Center(child: Text("AI", style: TextStyle(fontWeight: FontWeight.bold))),
+              child: const Center(
+                  child: Text("AI",
+                      style: TextStyle(fontWeight: FontWeight.bold))),
             ),
             const SizedBox(width: AppTheme.spacingMd),
           ],
           Flexible(
             child: Column(
-              crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
                 Stack(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(AppTheme.spacingMd),
                       decoration: BoxDecoration(
-                        color: isUser ? AppTheme.lightPrimary : AppTheme.lightSurface,
+                        color: isUser
+                            ? AppTheme.lightPrimary
+                            : AppTheme.lightSurface,
                         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
                         border: Border.all(
-                          color: isUser ? const Color(0xFF8B3A01) : AppTheme.lightDivider,
+                          color: isUser
+                              ? const Color(0xFF8B3A01)
+                              : AppTheme.lightDivider,
                           width: 2,
                         ),
                         boxShadow: AppTheme.shadowSm,
@@ -376,8 +447,10 @@ class _ChatBubble extends StatelessWidget {
                       child: SelectableText(
                         message.text,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: isUser ? AppTheme.lightOnPrimary : AppTheme.lightPrimaryText,
-                        ),
+                              color: isUser
+                                  ? AppTheme.lightOnPrimary
+                                  : AppTheme.lightPrimaryText,
+                            ),
                       ),
                     ),
                     Positioned(
@@ -388,13 +461,17 @@ class _ChatBubble extends StatelessWidget {
                         child: Container(
                           padding: const EdgeInsets.all(4),
                           decoration: BoxDecoration(
-                            color: isUser ? const Color(0xFF8B3A01) : AppTheme.lightDivider,
+                            color: isUser
+                                ? const Color(0xFF8B3A01)
+                                : AppTheme.lightDivider,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Icon(
                             Icons.copy_rounded,
                             size: 12,
-                            color: isUser ? AppTheme.lightOnPrimary : AppTheme.lightSecondaryText,
+                            color: isUser
+                                ? AppTheme.lightOnPrimary
+                                : AppTheme.lightSecondaryText,
                           ),
                         ),
                       ),
@@ -405,8 +482,8 @@ class _ChatBubble extends StatelessWidget {
                 Text(
                   formatTime(message.createdAt),
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: AppTheme.lightSecondaryText,
-                  ),
+                        color: AppTheme.lightSecondaryText,
+                      ),
                 ),
               ],
             ),
@@ -437,14 +514,15 @@ class _TriviaCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.auto_awesome, color: AppTheme.lightAccent, size: 20),
+              const Icon(Icons.auto_awesome,
+                  color: AppTheme.lightAccent, size: 20),
               const SizedBox(width: 8),
               Text(
                 "Did you know? - 1994",
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.lightOnSurface,
-                ),
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.lightOnSurface,
+                    ),
               ),
             ],
           ),
@@ -452,9 +530,9 @@ class _TriviaCard extends StatelessWidget {
           Text(
             fact,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppTheme.lightOnSurface,
-              height: 1.4,
-            ),
+                  color: AppTheme.lightOnSurface,
+                  height: 1.4,
+                ),
           ),
         ],
       ),

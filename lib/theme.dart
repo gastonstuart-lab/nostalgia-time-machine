@@ -5,7 +5,7 @@ class AppTheme {
   // ===========================================================================
   // COLORS
   // ===========================================================================
-  
+
   static const Color lightPrimary = Color(0xFFCC5803);
   static const Color lightOnPrimary = Color(0xFFFAF3E0);
   static const Color lightSecondary = Color(0xFF2A9D8F);
@@ -41,7 +41,7 @@ class AppTheme {
   // ===========================================================================
   // SPACING
   // ===========================================================================
-  
+
   static const double spacingXs = 4.0;
   static const double spacingSm = 8.0;
   static const double spacingMd = 16.0;
@@ -51,7 +51,7 @@ class AppTheme {
   // ===========================================================================
   // RADII
   // ===========================================================================
-  
+
   static const double radiusSm = 4.0;
   static const double radiusMd = 8.0;
   static const double radiusLg = 12.0;
@@ -61,42 +61,42 @@ class AppTheme {
   // ===========================================================================
   // SHADOWS
   // ===========================================================================
-  
+
   static List<BoxShadow> get shadowSm => [
-    BoxShadow(
-      color: const Color(0xFF3D2B1F).withValues(alpha: 0.2),
-      offset: const Offset(2, 2),
-      blurRadius: 0,
-      spreadRadius: 0,
-    ),
-  ];
+        BoxShadow(
+          color: const Color(0xFF3D2B1F).withValues(alpha: 0.2),
+          offset: const Offset(2, 2),
+          blurRadius: 0,
+          spreadRadius: 0,
+        ),
+      ];
 
   static List<BoxShadow> get shadowMd => [
-    BoxShadow(
-      color: const Color(0xFF3D2B1F).withValues(alpha: 0.3),
-      offset: const Offset(4, 4),
-      blurRadius: 0,
-      spreadRadius: 0,
-    ),
-  ];
+        BoxShadow(
+          color: const Color(0xFF3D2B1F).withValues(alpha: 0.3),
+          offset: const Offset(4, 4),
+          blurRadius: 0,
+          spreadRadius: 0,
+        ),
+      ];
 
   static List<BoxShadow> get shadowLg => [
-    BoxShadow(
-      color: const Color(0xFF3D2B1F).withValues(alpha: 0.4),
-      offset: const Offset(6, 6),
-      blurRadius: 0,
-      spreadRadius: 0,
-    ),
-  ];
+        BoxShadow(
+          color: const Color(0xFF3D2B1F).withValues(alpha: 0.4),
+          offset: const Offset(6, 6),
+          blurRadius: 0,
+          spreadRadius: 0,
+        ),
+      ];
 
   static List<BoxShadow> get shadowXl => [
-    BoxShadow(
-      color: const Color(0xFF3D2B1F).withValues(alpha: 0.5),
-      offset: const Offset(8, 8),
-      blurRadius: 0,
-      spreadRadius: 0,
-    ),
-  ];
+        BoxShadow(
+          color: const Color(0xFF3D2B1F).withValues(alpha: 0.5),
+          offset: const Offset(8, 8),
+          blurRadius: 0,
+          spreadRadius: 0,
+        ),
+      ];
 
   // ===========================================================================
   // THEMES
@@ -116,8 +116,6 @@ class AppTheme {
         onError: lightOnError,
         surface: lightSurface,
         onSurface: lightOnSurface,
-        background: lightBackground,
-        onBackground: lightOnSurface,
         outline: lightDivider,
         tertiary: lightAccent,
       ),
@@ -173,7 +171,8 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusMd),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: spacingLg, vertical: spacingMd),
+          padding: const EdgeInsets.symmetric(
+              horizontal: spacingLg, vertical: spacingMd),
         ),
       ),
     );
@@ -193,8 +192,6 @@ class AppTheme {
         onError: darkOnError,
         surface: darkSurface,
         onSurface: darkOnSurface,
-        background: darkBackground,
-        onBackground: darkOnSurface,
         outline: darkDivider,
         tertiary: darkAccent,
       ),
@@ -223,7 +220,7 @@ class AppTheme {
           side: const BorderSide(color: darkOnSurface, width: 2),
         ),
       ),
-       inputDecorationTheme: InputDecorationTheme(
+      inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: lightSurface,
         border: OutlineInputBorder(
@@ -250,7 +247,8 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusMd),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: spacingLg, vertical: spacingMd),
+          padding: const EdgeInsets.symmetric(
+              horizontal: spacingLg, vertical: spacingMd),
         ),
       ),
     );
@@ -283,7 +281,8 @@ class AppTheme {
         fontWeight: FontWeight.w700,
         height: 1.3,
       ),
-      titleSmall: GoogleFonts.spaceGrotesk( // Added for convenience
+      titleSmall: GoogleFonts.spaceGrotesk(
+        // Added for convenience
         fontSize: 14,
         fontWeight: FontWeight.w500,
         height: 1.3,

@@ -56,7 +56,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       );
 
       _messageController.clear();
-      
+
       // Scroll to bottom after sending
       Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
     } catch (e) {
@@ -123,17 +123,19 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                         const SizedBox(height: AppTheme.spacingMd),
                         Text(
                           'No messages yet',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: AppTheme.lightSecondaryText,
-                            fontWeight: FontWeight.w700,
-                          ),
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: AppTheme.lightSecondaryText,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                         ),
                         const SizedBox(height: AppTheme.spacingSm),
                         Text(
                           'Start the conversation!',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppTheme.lightSecondaryText,
-                          ),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: AppTheme.lightSecondaryText,
+                                  ),
                         ),
                       ],
                     ),
@@ -141,7 +143,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 }
 
                 // Auto-scroll to bottom when new messages arrive
-                WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+                WidgetsBinding.instance
+                    .addPostFrameCallback((_) => _scrollToBottom());
 
                 return ListView.builder(
                   controller: _scrollController,
@@ -174,8 +177,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   Expanded(
                     child: TextField(
                       controller: _messageController,
+                      style: const TextStyle(color: AppTheme.lightPrimaryText),
+                      cursorColor: AppTheme.lightPrimaryText,
                       decoration: InputDecoration(
                         hintText: 'Type a message...',
+                        hintStyle:
+                            const TextStyle(color: AppTheme.lightSecondaryText),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: AppTheme.spacingMd,
                           vertical: AppTheme.spacingMd,
@@ -192,10 +199,14 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: _isSending ? AppTheme.lightDivider : AppTheme.lightSecondary,
+                        color: _isSending
+                            ? AppTheme.lightDivider
+                            : AppTheme.lightSecondary,
                         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
                         border: Border.all(
-                          color: _isSending ? AppTheme.lightDivider : const Color(0xFF1E7066),
+                          color: _isSending
+                              ? AppTheme.lightDivider
+                              : const Color(0xFF1E7066),
                           width: 2,
                         ),
                       ),
@@ -205,7 +216,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                               height: 24,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(AppTheme.lightOnPrimary),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    AppTheme.lightOnPrimary),
                               ),
                             )
                           : const Icon(
@@ -239,7 +251,8 @@ class _MessageBubble extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppTheme.spacingMd),
       child: Row(
-        mainAxisAlignment: isCurrentUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment:
+            isCurrentUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!isCurrentUser) ...[
@@ -253,7 +266,9 @@ class _MessageBubble extends StatelessWidget {
               ),
               child: Center(
                 child: Text(
-                  message.senderName.isNotEmpty ? message.senderName[0].toUpperCase() : '?',
+                  message.senderName.isNotEmpty
+                      ? message.senderName[0].toUpperCase()
+                      : '?',
                   style: const TextStyle(
                     color: AppTheme.lightOnPrimary,
                     fontWeight: FontWeight.bold,
@@ -266,14 +281,16 @@ class _MessageBubble extends StatelessWidget {
           ],
           Flexible(
             child: Column(
-              crossAxisAlignment: isCurrentUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              crossAxisAlignment: isCurrentUser
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
               children: [
                 Text(
                   isCurrentUser ? 'You' : message.senderName,
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.lightSecondaryText,
-                  ),
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.lightSecondaryText,
+                      ),
                 ),
                 const SizedBox(height: 4),
                 Container(
@@ -282,23 +299,31 @@ class _MessageBubble extends StatelessWidget {
                     vertical: AppTheme.spacingSm,
                   ),
                   decoration: BoxDecoration(
-                    color: isCurrentUser ? AppTheme.lightSecondary : AppTheme.lightSurface,
+                    color: isCurrentUser
+                        ? AppTheme.lightSecondary
+                        : AppTheme.lightSurface,
                     borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(isCurrentUser ? AppTheme.radiusMd : 4),
-                      topRight: Radius.circular(isCurrentUser ? 4 : AppTheme.radiusMd),
+                      topLeft: Radius.circular(
+                          isCurrentUser ? AppTheme.radiusMd : 4),
+                      topRight: Radius.circular(
+                          isCurrentUser ? 4 : AppTheme.radiusMd),
                       bottomLeft: const Radius.circular(AppTheme.radiusMd),
                       bottomRight: const Radius.circular(AppTheme.radiusMd),
                     ),
                     border: Border.all(
-                      color: isCurrentUser ? const Color(0xFF1E7066) : AppTheme.lightDivider,
+                      color: isCurrentUser
+                          ? const Color(0xFF1E7066)
+                          : AppTheme.lightDivider,
                       width: 2,
                     ),
                   ),
                   child: Text(
                     message.text,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: isCurrentUser ? AppTheme.lightOnPrimary : AppTheme.lightPrimaryText,
-                    ),
+                          color: isCurrentUser
+                              ? AppTheme.lightOnPrimary
+                              : AppTheme.lightPrimaryText,
+                        ),
                   ),
                 ),
               ],
@@ -316,7 +341,9 @@ class _MessageBubble extends StatelessWidget {
               ),
               child: Center(
                 child: Text(
-                  message.senderName.isNotEmpty ? message.senderName[0].toUpperCase() : '?',
+                  message.senderName.isNotEmpty
+                      ? message.senderName[0].toUpperCase()
+                      : '?',
                   style: const TextStyle(
                     color: AppTheme.lightOnPrimary,
                     fontWeight: FontWeight.bold,

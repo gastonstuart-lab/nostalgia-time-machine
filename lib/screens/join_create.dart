@@ -18,7 +18,8 @@ class _JoinCreateScreenState extends State<JoinCreateScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _codeController = TextEditingController();
   int _selectedAvatarIndex = 0;
-  String? _createdGroupCode;
+  int _startDecade = 1990;
+  String _quizDifficulty = 'medium';
 
   final List<Map<String, dynamic>> _avatars = [
     {'icon': Icons.person, 'color': AppTheme.lightBackground},
@@ -42,7 +43,7 @@ class _JoinCreateScreenState extends State<JoinCreateScreen> {
       return;
     }
     if (_codeController.text.isEmpty) {
-       ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a group code')),
       );
       return;
@@ -50,11 +51,11 @@ class _JoinCreateScreenState extends State<JoinCreateScreen> {
 
     final avatar = _avatars[_selectedAvatarIndex];
     final success = await context.read<NostalgiaProvider>().joinGroup(
-      code: _codeController.text.trim().toUpperCase(),
-      displayName: _nameController.text,
-      avatarIcon: 'avatar_$_selectedAvatarIndex',
-      avatarColor: (avatar['color'] as Color).value,
-    );
+          code: _codeController.text.trim().toUpperCase(),
+          displayName: _nameController.text,
+          avatarIcon: 'avatar_$_selectedAvatarIndex',
+          avatarColor: (avatar['color'] as Color).toARGB32(),
+        );
 
     if (!mounted) return;
 
@@ -62,13 +63,14 @@ class _JoinCreateScreenState extends State<JoinCreateScreen> {
       context.go('/dashboard');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Group not found. Check the code and try again.')),
+        const SnackBar(
+            content: Text('Group not found. Check the code and try again.')),
       );
     }
   }
 
   Future<void> _createGroup() async {
-     if (_nameController.text.isEmpty) {
+    if (_nameController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a display name')),
       );
@@ -77,24 +79,26 @@ class _JoinCreateScreenState extends State<JoinCreateScreen> {
 
     final avatar = _avatars[_selectedAvatarIndex];
     final success = await context.read<NostalgiaProvider>().createGroup(
-      displayName: _nameController.text,
-      avatarIcon: 'avatar_$_selectedAvatarIndex',
-      avatarColor: (avatar['color'] as Color).value,
-    );
+          displayName: _nameController.text,
+          avatarIcon: 'avatar_$_selectedAvatarIndex',
+          avatarColor: (avatar['color'] as Color).toARGB32(),
+          startDecade: _startDecade,
+          quizDifficulty: _quizDifficulty,
+        );
 
     if (!mounted) return;
 
     if (success) {
       final code = context.read<NostalgiaProvider>().currentGroup?.code;
       if (code != null) {
-        setState(() => _createdGroupCode = code);
         _showSuccessDialog(code);
       } else {
         context.go('/dashboard');
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to create group. Please try again.')),
+        const SnackBar(
+            content: Text('Failed to create group. Please try again.')),
       );
     }
   }
@@ -131,10 +135,10 @@ class _JoinCreateScreenState extends State<JoinCreateScreen> {
               child: SelectableText(
                 code,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 4,
-                  color: AppTheme.lightOnSurface,
-                ),
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 4,
+                      color: AppTheme.lightOnSurface,
+                    ),
               ),
             ),
             const SizedBox(height: AppTheme.spacingMd),
@@ -153,7 +157,9 @@ class _JoinCreateScreenState extends State<JoinCreateScreen> {
                 ),
                 TextButton.icon(
                   onPressed: () {
-                    Share.share('Join my Rewind crew! Code: $code');
+                    SharePlus.instance.share(
+                      ShareParams(text: 'Join my Rewind crew! Code: $code'),
+                    );
                   },
                   icon: const Icon(Icons.share_rounded),
                   label: const Text('Share'),
@@ -205,25 +211,27 @@ class _JoinCreateScreenState extends State<JoinCreateScreen> {
                     decoration: BoxDecoration(
                       color: AppTheme.lightPrimary,
                       shape: BoxShape.circle,
-                      border: Border.all(color: AppTheme.lightOnSurface, width: 3),
+                      border:
+                          Border.all(color: AppTheme.lightOnSurface, width: 3),
                       boxShadow: AppTheme.shadowMd,
                     ),
-                    child: const Icon(Icons.history_edu_rounded, color: AppTheme.lightOnPrimary, size: 40),
+                    child: const Icon(Icons.history_edu_rounded,
+                        color: AppTheme.lightOnPrimary, size: 40),
                   ),
                   const SizedBox(height: AppTheme.spacingSm),
                   Text(
                     "REWIND",
                     style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                      color: AppTheme.lightPrimary,
-                      height: 1.0,
-                    ),
+                          color: AppTheme.lightPrimary,
+                          height: 1.0,
+                        ),
                   ),
                   Text(
                     "COLLECTIVE",
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: AppTheme.lightOnSurface,
-                      height: 1.0,
-                    ),
+                          color: AppTheme.lightOnSurface,
+                          height: 1.0,
+                        ),
                   ),
                 ],
               ),
@@ -244,9 +252,9 @@ class _JoinCreateScreenState extends State<JoinCreateScreen> {
                     Text(
                       "YOUR IDENTITY",
                       style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        color: AppTheme.lightOnSurface,
-                      ),
+                            fontWeight: FontWeight.w900,
+                            color: AppTheme.lightOnSurface,
+                          ),
                     ),
                     const SizedBox(height: AppTheme.spacingMd),
                     _RetroInput(
@@ -258,16 +266,17 @@ class _JoinCreateScreenState extends State<JoinCreateScreen> {
                     Text(
                       "CHOOSE AVATAR",
                       style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        color: AppTheme.lightOnSurface,
-                      ),
+                            fontWeight: FontWeight.w900,
+                            color: AppTheme.lightOnSurface,
+                          ),
                     ),
                     const SizedBox(height: AppTheme.spacingSm),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: List.generate(_avatars.length, (index) {
                         return GestureDetector(
-                          onTap: () => setState(() => _selectedAvatarIndex = index),
+                          onTap: () =>
+                              setState(() => _selectedAvatarIndex = index),
                           child: _AvatarPickerItem(
                             icon: _avatars[index]['icon'],
                             bgColor: _avatars[index]['color'],
@@ -284,18 +293,22 @@ class _JoinCreateScreenState extends State<JoinCreateScreen> {
               // Join Group Card
               _ActionCard(
                 title: "JOIN GROUP",
-                description: "Have a secret code? Jump into an existing time machine.",
+                description:
+                    "Have a secret code? Jump into an existing time machine.",
                 icon: Icons.group_add,
                 bgColor: AppTheme.lightBackground,
                 child: Row(
                   children: [
                     Expanded(
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 4),
                         decoration: BoxDecoration(
                           color: AppTheme.lightBackground,
-                          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                          border: Border.all(color: AppTheme.lightOnSurface, width: 2),
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusMd),
+                          border: Border.all(
+                              color: AppTheme.lightOnSurface, width: 2),
                         ),
                         child: TextField(
                           controller: _codeController,
@@ -313,11 +326,14 @@ class _JoinCreateScreenState extends State<JoinCreateScreen> {
                     GestureDetector(
                       onTap: _joinGroup,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 16),
                         decoration: BoxDecoration(
                           color: AppTheme.lightSecondary,
-                          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                          border: Border.all(color: AppTheme.lightOnSurface, width: 3),
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusMd),
+                          border: Border.all(
+                              color: AppTheme.lightOnSurface, width: 3),
                         ),
                         child: const Text(
                           "GO",
@@ -337,45 +353,98 @@ class _JoinCreateScreenState extends State<JoinCreateScreen> {
               // Create Group Card
               _ActionCard(
                 title: "NEW CREW",
-                description: "Start a new journey from 1990 with your best friends.",
+                description:
+                    "Choose your starting decade and quiz difficulty, then launch your crew.",
                 icon: Icons.auto_awesome,
                 bgColor: AppTheme.lightSecondary,
-                child: GestureDetector(
-                  onTap: _createGroup,
-                  child: Container(
-                    padding: const EdgeInsets.all(AppTheme.spacingMd),
-                    decoration: BoxDecoration(
-                      color: AppTheme.lightOnSurface,
-                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        Icon(Icons.rocket_launch, color: AppTheme.lightOnPrimary, size: 20),
-                        SizedBox(width: AppTheme.spacingSm),
-                        Text(
-                          "CREATE TIME MACHINE",
-                          style: TextStyle(
-                            color: AppTheme.lightOnPrimary,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
+                child: Column(
+                  children: [
+                    DropdownButtonFormField<int>(
+                      value: _startDecade,
+                      decoration: const InputDecoration(
+                        labelText: "Starting Decade",
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 1970, child: Text('1970s')),
+                        DropdownMenuItem(value: 1980, child: Text('1980s')),
+                        DropdownMenuItem(value: 1990, child: Text('1990s')),
+                        DropdownMenuItem(value: 2000, child: Text('2000s')),
+                        DropdownMenuItem(value: 2010, child: Text('2010s')),
                       ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _startDecade = value);
+                      },
                     ),
-                  ),
+                    const SizedBox(height: AppTheme.spacingMd),
+                    DropdownButtonFormField<String>(
+                      value: _quizDifficulty,
+                      decoration: const InputDecoration(
+                        labelText: "Initial Quiz Difficulty",
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'easy', child: Text('Easy')),
+                        DropdownMenuItem(
+                            value: 'medium', child: Text('Medium')),
+                        DropdownMenuItem(value: 'hard', child: Text('Hard')),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _quizDifficulty = value);
+                      },
+                    ),
+                    const SizedBox(height: AppTheme.spacingMd),
+                    GestureDetector(
+                      onTap: _createGroup,
+                      child: Container(
+                        padding: const EdgeInsets.all(AppTheme.spacingMd),
+                        decoration: BoxDecoration(
+                          color: AppTheme.lightOnSurface,
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusMd),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            Icon(Icons.rocket_launch,
+                                color: AppTheme.lightOnPrimary, size: 20),
+                            SizedBox(width: AppTheme.spacingSm),
+                            Text(
+                              "CREATE TIME MACHINE",
+                              style: TextStyle(
+                                color: AppTheme.lightOnPrimary,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              
+
               const SizedBox(height: AppTheme.spacingXl),
               Center(
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(height: 4, width: 40, decoration: BoxDecoration(color: AppTheme.lightOnSurface, borderRadius: BorderRadius.circular(99))),
+                    Container(
+                        height: 4,
+                        width: 40,
+                        decoration: BoxDecoration(
+                            color: AppTheme.lightOnSurface,
+                            borderRadius: BorderRadius.circular(99))),
                     const SizedBox(width: AppTheme.spacingSm),
-                    const Icon(Icons.album, color: AppTheme.lightOnSurface, size: 24),
+                    const Icon(Icons.album,
+                        color: AppTheme.lightOnSurface, size: 24),
                     const SizedBox(width: AppTheme.spacingSm),
-                    Container(height: 4, width: 40, decoration: BoxDecoration(color: AppTheme.lightOnSurface, borderRadius: BorderRadius.circular(99))),
+                    Container(
+                        height: 4,
+                        width: 40,
+                        decoration: BoxDecoration(
+                            color: AppTheme.lightOnSurface,
+                            borderRadius: BorderRadius.circular(99))),
                   ],
                 ),
               ),
@@ -406,9 +475,9 @@ class _RetroInput extends StatelessWidget {
         Text(
           label,
           style: Theme.of(context).textTheme.labelLarge?.copyWith(
-            color: AppTheme.lightOnSurface,
-            fontWeight: FontWeight.bold,
-          ),
+                color: AppTheme.lightOnSurface,
+                fontWeight: FontWeight.bold,
+              ),
         ),
         const SizedBox(height: AppTheme.spacingXs),
         Container(
@@ -508,9 +577,9 @@ class _ActionCard extends StatelessWidget {
               Text(
                 title,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  color: AppTheme.lightOnSurface,
-                ),
+                      fontWeight: FontWeight.w900,
+                      color: AppTheme.lightOnSurface,
+                    ),
               ),
             ],
           ),
@@ -518,8 +587,8 @@ class _ActionCard extends StatelessWidget {
           Text(
             description,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppTheme.lightOnSurface,
-            ),
+                  color: AppTheme.lightOnSurface,
+                ),
           ),
           const SizedBox(height: AppTheme.spacingMd),
           child,

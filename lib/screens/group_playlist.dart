@@ -94,7 +94,9 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
 
       final result = <Song>[];
       final userKeys = grouped.keys.toList();
-      int maxLength = grouped.values.map((list) => list.length).reduce((a, b) => a > b ? a : b);
+      int maxLength = grouped.values
+          .map((list) => list.length)
+          .reduce((a, b) => a > b ? a : b);
 
       for (int i = 0; i < maxLength; i++) {
         for (final uid in userKeys) {
@@ -176,7 +178,8 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    if (group == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (group == null)
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -187,8 +190,16 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
         ),
         title: Column(
           children: [
-            Text("The Weekly Spin", style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.w800)),
-            Text("${group.currentYear} Playlist", style: theme.textTheme.headlineSmall?.copyWith(color: isDark ? AppTheme.darkPrimaryText : AppTheme.lightPrimaryText, fontWeight: FontWeight.w900)),
+            Text("The Weekly Spin",
+                style: theme.textTheme.labelLarge?.copyWith(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.w800)),
+            Text("${group.currentYear} Playlist",
+                style: theme.textTheme.headlineSmall?.copyWith(
+                    color: isDark
+                        ? AppTheme.darkPrimaryText
+                        : AppTheme.lightPrimaryText,
+                    fontWeight: FontWeight.w900)),
           ],
         ),
         actions: [
@@ -198,9 +209,11 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
               decoration: BoxDecoration(
                 color: theme.colorScheme.tertiary,
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                border: Border.all(color: theme.colorScheme.onSurface, width: 2),
+                border:
+                    Border.all(color: theme.colorScheme.onSurface, width: 2),
               ),
-              child: Icon(Icons.settings_input_component, color: theme.colorScheme.onSurface, size: 24),
+              child: Icon(Icons.settings_input_component,
+                  color: theme.colorScheme.onSurface, size: 24),
             ),
             onPressed: () => context.push(AppRoutes.settings),
           ),
@@ -210,7 +223,9 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final isWide = constraints.maxWidth >= 900;
-            return isWide ? _buildWideLayout(provider, songs) : _buildNarrowLayout(provider, songs, constraints);
+            return isWide
+                ? _buildWideLayout(provider, songs)
+                : _buildNarrowLayout(provider, songs, constraints);
           },
         ),
       ),
@@ -218,46 +233,53 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
   }
 
   Widget _buildWideLayout(NostalgiaProvider provider, List<Song> songs) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Expanded(
-        flex: 2,
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(AppTheme.spacingLg),
-            child: _buildPlayerCard(songs),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 2,
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(AppTheme.spacingLg),
+                child: _buildPlayerCard(songs),
+              ),
+            ),
           ),
-        ),
-      ),
-      Expanded(
-        flex: 3,
-        child: Container(
-          padding: const EdgeInsets.only(top: AppTheme.spacingLg, right: AppTheme.spacingLg, bottom: AppTheme.spacingLg),
-          child: _buildTabContent(provider, songs),
-        ),
-      ),
-    ],
-  );
+          Expanded(
+            flex: 3,
+            child: Container(
+              padding: const EdgeInsets.only(
+                  top: AppTheme.spacingLg,
+                  right: AppTheme.spacingLg,
+                  bottom: AppTheme.spacingLg),
+              child: _buildTabContent(provider, songs),
+            ),
+          ),
+        ],
+      );
 
-  Widget _buildNarrowLayout(NostalgiaProvider provider, List<Song> songs, BoxConstraints constraints) => Column(
-    children: [
-      ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: constraints.maxHeight * 0.45),
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(AppTheme.spacingLg),
-            child: _buildPlayerCard(songs),
+  Widget _buildNarrowLayout(NostalgiaProvider provider, List<Song> songs,
+          BoxConstraints constraints) =>
+      Column(
+        children: [
+          ConstrainedBox(
+            constraints:
+                BoxConstraints(maxHeight: constraints.maxHeight * 0.45),
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(AppTheme.spacingLg),
+                child: _buildPlayerCard(songs),
+              ),
+            ),
           ),
-        ),
-      ),
-      Expanded(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
-          child: _buildTabContent(provider, songs),
-        ),
-      ),
-    ],
-  );
+          Expanded(
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
+              child: _buildTabContent(provider, songs),
+            ),
+          ),
+        ],
+      );
 
   Widget _buildPlayerCard(List<Song> songs) {
     final theme = Theme.of(context);
@@ -281,9 +303,12 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
           ),
           const SizedBox(height: AppTheme.spacingMd),
           Text(
-            _currentSong?.title ?? _currentEpisode?.showTitle ?? "Select a track",
+            _currentSong?.title ??
+                _currentEpisode?.showTitle ??
+                "Select a track",
             style: theme.textTheme.titleLarge?.copyWith(
-              color: isDark ? AppTheme.darkOnSecondary : AppTheme.lightOnPrimary,
+              color:
+                  isDark ? AppTheme.darkOnSecondary : AppTheme.lightOnPrimary,
               fontWeight: FontWeight.w900,
             ),
             textAlign: TextAlign.center,
@@ -291,7 +316,9 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
           Text(
             _currentSong?.artist ?? _currentEpisode?.episodeTitle ?? "Artist",
             style: theme.textTheme.bodyMedium?.copyWith(
-              color: (isDark ? AppTheme.darkOnSecondary : AppTheme.lightOnPrimary).withValues(alpha: 0.9),
+              color:
+                  (isDark ? AppTheme.darkOnSecondary : AppTheme.lightOnPrimary)
+                      .withValues(alpha: 0.9),
             ),
             textAlign: TextAlign.center,
           ),
@@ -301,16 +328,26 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 IconButton(
-                  icon: Icon(Icons.skip_previous, color: isDark ? AppTheme.darkOnSecondary : AppTheme.lightOnPrimary),
+                  icon: Icon(Icons.skip_previous,
+                      color: isDark
+                          ? AppTheme.darkOnSecondary
+                          : AppTheme.lightOnPrimary),
                   onPressed: _currentIndex > 0 ? _playPrevious : null,
                 ),
                 IconButton(
-                  icon: Icon(Icons.stop, color: isDark ? AppTheme.darkOnSecondary : AppTheme.lightOnPrimary),
+                  icon: Icon(Icons.stop,
+                      color: isDark
+                          ? AppTheme.darkOnSecondary
+                          : AppTheme.lightOnPrimary),
                   onPressed: _stopPlayAll,
                 ),
                 IconButton(
-                  icon: Icon(Icons.skip_next, color: isDark ? AppTheme.darkOnSecondary : AppTheme.lightOnPrimary),
-                  onPressed: _currentIndex < _playQueue.length - 1 ? _playNext : null,
+                  icon: Icon(Icons.skip_next,
+                      color: isDark
+                          ? AppTheme.darkOnSecondary
+                          : AppTheme.lightOnPrimary),
+                  onPressed:
+                      _currentIndex < _playQueue.length - 1 ? _playNext : null,
                 ),
               ],
             ),
@@ -323,65 +360,71 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
   Widget _buildTabContent(NostalgiaProvider provider, List<Song> songs) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-            border: Border.all(color: theme.colorScheme.onSurface, width: 2),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => setState(() => _selectedTab = 'Songs'),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: _selectedTab == 'Songs' ? theme.colorScheme.primary : Colors.transparent,
-                      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                    ),
-                    child: Text(
-                      "Songs",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: _selectedTab == 'Songs' 
-                          ? (isDark ? AppTheme.darkOnPrimary : AppTheme.lightOnPrimary)
-                          : theme.colorScheme.onSurface,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => setState(() => _selectedTab = 'TV'),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: _selectedTab == 'TV' ? theme.colorScheme.primary : Colors.transparent,
-                      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                    ),
-                    child: Text(
-                      "TV",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: _selectedTab == 'TV'
-                          ? (isDark ? AppTheme.darkOnPrimary : AppTheme.lightOnPrimary)
-                          : theme.colorScheme.onSurface,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          border: Border.all(color: theme.colorScheme.onSurface, width: 2),
         ),
+        child: Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() => _selectedTab = 'Songs'),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: _selectedTab == 'Songs'
+                        ? theme.colorScheme.primary
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                  ),
+                  child: Text(
+                    "Songs",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: _selectedTab == 'Songs'
+                          ? (isDark
+                              ? AppTheme.darkOnPrimary
+                              : AppTheme.lightOnPrimary)
+                          : theme.colorScheme.onSurface,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() => _selectedTab = 'TV'),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: _selectedTab == 'TV'
+                        ? theme.colorScheme.primary
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                  ),
+                  child: Text(
+                    "TV",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: _selectedTab == 'TV'
+                          ? (isDark
+                              ? AppTheme.darkOnPrimary
+                              : AppTheme.lightOnPrimary)
+                          : theme.colorScheme.onSurface,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
       const SizedBox(height: AppTheme.spacingMd),
       if (_selectedTab == 'Songs') ..._buildSongsView(songs),
       if (_selectedTab == 'TV') ..._buildTVView(provider.episodes),
@@ -398,7 +441,8 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Delete Song?"),
-        content: const Text("Delete this song? This removes it for the whole group."),
+        content: const Text(
+            "Delete this song? This removes it for the whole group."),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -444,7 +488,8 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Delete Episode?"),
-        content: const Text("Delete this episode? This removes it for the whole group."),
+        content: const Text(
+            "Delete this episode? This removes it for the whole group."),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -483,11 +528,19 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
   List<Widget> _buildSongsView(List<Song> songs) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final provider = context.watch<NostalgiaProvider>();
+    final group = provider.currentGroup;
+    final songCap = group?.songCapPerUser ?? 7;
     return [
       Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text("Group Contributions", style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, color: isDark ? AppTheme.darkPrimaryText : AppTheme.lightPrimaryText)),
+          Text("Group Contributions",
+              style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: isDark
+                      ? AppTheme.darkPrimaryText
+                      : AppTheme.lightPrimaryText)),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -495,20 +548,39 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
             children: [
               if (!_isPlayAllActive) ...[
                 GestureDetector(
-                  onTap: () => setState(() => _shuffleEnabled = !_shuffleEnabled),
+                  onTap: () =>
+                      setState(() => _shuffleEnabled = !_shuffleEnabled),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: _shuffleEnabled ? theme.colorScheme.primary : theme.scaffoldBackgroundColor,
+                      color: _shuffleEnabled
+                          ? theme.colorScheme.primary
+                          : theme.scaffoldBackgroundColor,
                       borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                      border: Border.all(color: theme.colorScheme.onSurface, width: 2),
+                      border: Border.all(
+                          color: theme.colorScheme.onSurface, width: 2),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.shuffle, color: _shuffleEnabled ? (isDark ? AppTheme.darkOnPrimary : AppTheme.lightOnPrimary) : theme.colorScheme.onSurface, size: 16),
+                        Icon(Icons.shuffle,
+                            color: _shuffleEnabled
+                                ? (isDark
+                                    ? AppTheme.darkOnPrimary
+                                    : AppTheme.lightOnPrimary)
+                                : theme.colorScheme.onSurface,
+                            size: 16),
                         const SizedBox(width: 4),
-                        Text("Shuffle", style: TextStyle(color: _shuffleEnabled ? (isDark ? AppTheme.darkOnPrimary : AppTheme.lightOnPrimary) : theme.colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 12)),
+                        Text("Shuffle",
+                            style: TextStyle(
+                                color: _shuffleEnabled
+                                    ? (isDark
+                                        ? AppTheme.darkOnPrimary
+                                        : AppTheme.lightOnPrimary)
+                                    : theme.colorScheme.onSurface,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12)),
                       ],
                     ),
                   ),
@@ -518,22 +590,32 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
                     initialValue: _shuffleMode,
                     onSelected: (value) => setState(() => _shuffleMode = value),
                     itemBuilder: (context) => [
-                      const PopupMenuItem(value: 'Random', child: Text('Random')),
-                      const PopupMenuItem(value: 'By User', child: Text('By User')),
+                      const PopupMenuItem(
+                          value: 'Random', child: Text('Random')),
+                      const PopupMenuItem(
+                          value: 'By User', child: Text('By User')),
                     ],
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.tertiary,
-                        borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                        border: Border.all(color: theme.colorScheme.onSurface, width: 2),
+                        borderRadius:
+                            BorderRadius.circular(AppTheme.radiusFull),
+                        border: Border.all(
+                            color: theme.colorScheme.onSurface, width: 2),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(_shuffleMode, style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 12)),
+                          Text(_shuffleMode,
+                              style: TextStyle(
+                                  color: theme.colorScheme.onSurface,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12)),
                           const SizedBox(width: 4),
-                          Icon(Icons.arrow_drop_down, color: theme.colorScheme.onSurface, size: 16),
+                          Icon(Icons.arrow_drop_down,
+                              color: theme.colorScheme.onSurface, size: 16),
                         ],
                       ),
                     ),
@@ -541,31 +623,49 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
                 GestureDetector(
                   onTap: _startPlayAll,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primary,
                       borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                      border: Border.all(color: theme.colorScheme.onSurface, width: 2),
+                      border: Border.all(
+                          color: theme.colorScheme.onSurface, width: 2),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.play_arrow, color: isDark ? AppTheme.darkOnPrimary : AppTheme.lightOnPrimary, size: 16),
+                        Icon(Icons.play_arrow,
+                            color: isDark
+                                ? AppTheme.darkOnPrimary
+                                : AppTheme.lightOnPrimary,
+                            size: 16),
                         const SizedBox(width: 4),
-                        Text("Play All", style: TextStyle(color: isDark ? AppTheme.darkOnPrimary : AppTheme.lightOnPrimary, fontWeight: FontWeight.bold, fontSize: 12)),
+                        Text("Play All",
+                            style: TextStyle(
+                                color: isDark
+                                    ? AppTheme.darkOnPrimary
+                                    : AppTheme.lightOnPrimary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12)),
                       ],
                     ),
                   ),
                 ),
               ],
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
                   color: theme.scaffoldBackgroundColor,
                   borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                  border: Border.all(color: theme.colorScheme.onSurface, width: 2),
+                  border:
+                      Border.all(color: theme.colorScheme.onSurface, width: 2),
                 ),
-                child: Text("${songs.length} Songs", style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 12)),
+                child: Text("${songs.length} / $songCap Songs",
+                    style: TextStyle(
+                        color: theme.colorScheme.onSurface,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12)),
               ),
             ],
           ),
@@ -593,11 +693,19 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
   List<Widget> _buildTVView(List<Episode> episodes) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final provider = context.watch<NostalgiaProvider>();
+    final group = provider.currentGroup;
+    final episodeCap = group?.episodeCapPerUser ?? 1;
     return [
       Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text("TV Episodes", style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, color: isDark ? AppTheme.darkPrimaryText : AppTheme.lightPrimaryText)),
+          Text("TV Episodes",
+              style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: isDark
+                      ? AppTheme.darkPrimaryText
+                      : AppTheme.lightPrimaryText)),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             decoration: BoxDecoration(
@@ -605,7 +713,11 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
               borderRadius: BorderRadius.circular(AppTheme.radiusFull),
               border: Border.all(color: theme.colorScheme.onSurface, width: 2),
             ),
-            child: Text("${episodes.length} Episodes", style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 12)),
+            child: Text("${episodes.length} / $episodeCap Episodes",
+                style: TextStyle(
+                    color: theme.colorScheme.onSurface,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12)),
           ),
         ],
       ),
@@ -615,7 +727,10 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
             ? Center(
                 child: Text(
                   "No TV episodes yet",
-                  style: theme.textTheme.bodyMedium?.copyWith(color: isDark ? AppTheme.darkSecondaryText : AppTheme.lightSecondaryText),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                      color: isDark
+                          ? AppTheme.darkSecondaryText
+                          : AppTheme.lightSecondaryText),
                 ),
               )
             : ListView.builder(
@@ -671,9 +786,15 @@ class _SongItemWithReactions extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: AppTheme.spacingMd),
           padding: const EdgeInsets.all(AppTheme.spacingMd),
           decoration: BoxDecoration(
-            color: isPlaying ? theme.colorScheme.primary.withValues(alpha: 0.1) : theme.colorScheme.surface,
+            color: isPlaying
+                ? theme.colorScheme.primary.withValues(alpha: 0.1)
+                : theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-            border: Border.all(color: isPlaying ? theme.colorScheme.primary : theme.colorScheme.onSurface, width: 2),
+            border: Border.all(
+                color: isPlaying
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurface,
+                width: 2),
             boxShadow: AppTheme.shadowSm,
           ),
           child: Column(
@@ -686,11 +807,19 @@ class _SongItemWithReactions extends StatelessWidget {
                       width: 60,
                       height: 60,
                       decoration: BoxDecoration(
-                        color: isDark ? AppTheme.darkSecondary : AppTheme.lightSecondary,
+                        color: isDark
+                            ? AppTheme.darkSecondary
+                            : AppTheme.lightSecondary,
                         borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                        border: Border.all(color: theme.colorScheme.onSurface, width: 2),
+                        border: Border.all(
+                            color: theme.colorScheme.onSurface, width: 2),
                       ),
-                      child: Icon(isPlaying ? Icons.pause : Icons.play_arrow_rounded, color: isDark ? AppTheme.darkOnSecondary : AppTheme.lightOnPrimary, size: 32),
+                      child: Icon(
+                          isPlaying ? Icons.pause : Icons.play_arrow_rounded,
+                          color: isDark
+                              ? AppTheme.darkOnSecondary
+                              : AppTheme.lightOnPrimary,
+                          size: 32),
                     ),
                   ),
                   const SizedBox(width: AppTheme.spacingMd),
@@ -698,19 +827,46 @@ class _SongItemWithReactions extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(song.title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, color: isDark ? AppTheme.darkPrimaryText : AppTheme.lightPrimaryText), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text(song.artist, style: theme.textTheme.bodySmall?.copyWith(color: isDark ? AppTheme.darkSecondaryText : AppTheme.lightSecondaryText), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text(song.title,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                color: isDark
+                                    ? AppTheme.darkPrimaryText
+                                    : AppTheme.lightPrimaryText),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                        Text(song.artist,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                                color: isDark
+                                    ? AppTheme.darkSecondaryText
+                                    : AppTheme.lightSecondaryText),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 4),
                         Row(
                           children: [
                             Container(
                               width: 18,
                               height: 18,
-                              decoration: BoxDecoration(color: theme.colorScheme.tertiary, shape: BoxShape.circle, border: Border.all(color: theme.colorScheme.onSurface)),
-                              child: Center(child: Text(song.addedByName.isNotEmpty ? song.addedByName.substring(0, 1) : "?", style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold))),
+                              decoration: BoxDecoration(
+                                  color: theme.colorScheme.tertiary,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                      color: theme.colorScheme.onSurface)),
+                              child: Center(
+                                  child: Text(
+                                      song.addedByName.isNotEmpty
+                                          ? song.addedByName.substring(0, 1)
+                                          : "?",
+                                      style: const TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold))),
                             ),
                             const SizedBox(width: 4),
-                            Text("Added by ${song.addedByName}", style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurface, fontWeight: FontWeight.w600)),
+                            Text("Added by ${song.addedByName}",
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                    color: theme.colorScheme.onSurface,
+                                    fontWeight: FontWeight.w600)),
                           ],
                         ),
                       ],
@@ -718,7 +874,8 @@ class _SongItemWithReactions extends StatelessWidget {
                   ),
                   if (canDelete)
                     IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                      icon: const Icon(Icons.delete_outline,
+                          color: Colors.red, size: 20),
                       onPressed: onDelete,
                     ),
                 ],
@@ -730,11 +887,24 @@ class _SongItemWithReactions extends StatelessWidget {
                     icon: '👍',
                     count: reactionCounts['like'] ?? 0,
                     onTap: () async {
-                      final current = await firestoreService.getUserReaction(groupId: groupId, weekId: weekId, songId: song.id, uid: currentUid);
+                      final current = await firestoreService.getUserReaction(
+                          groupId: groupId,
+                          weekId: weekId,
+                          songId: song.id,
+                          uid: currentUid);
                       if (current == 'like') {
-                        await firestoreService.removeReaction(groupId: groupId, weekId: weekId, songId: song.id, uid: currentUid);
+                        await firestoreService.removeReaction(
+                            groupId: groupId,
+                            weekId: weekId,
+                            songId: song.id,
+                            uid: currentUid);
                       } else {
-                        await firestoreService.addReaction(groupId: groupId, weekId: weekId, songId: song.id, uid: currentUid, type: 'like');
+                        await firestoreService.addReaction(
+                            groupId: groupId,
+                            weekId: weekId,
+                            songId: song.id,
+                            uid: currentUid,
+                            type: 'like');
                       }
                     },
                   ),
@@ -743,11 +913,24 @@ class _SongItemWithReactions extends StatelessWidget {
                     icon: '😂',
                     count: reactionCounts['funny'] ?? 0,
                     onTap: () async {
-                      final current = await firestoreService.getUserReaction(groupId: groupId, weekId: weekId, songId: song.id, uid: currentUid);
+                      final current = await firestoreService.getUserReaction(
+                          groupId: groupId,
+                          weekId: weekId,
+                          songId: song.id,
+                          uid: currentUid);
                       if (current == 'funny') {
-                        await firestoreService.removeReaction(groupId: groupId, weekId: weekId, songId: song.id, uid: currentUid);
+                        await firestoreService.removeReaction(
+                            groupId: groupId,
+                            weekId: weekId,
+                            songId: song.id,
+                            uid: currentUid);
                       } else {
-                        await firestoreService.addReaction(groupId: groupId, weekId: weekId, songId: song.id, uid: currentUid, type: 'funny');
+                        await firestoreService.addReaction(
+                            groupId: groupId,
+                            weekId: weekId,
+                            songId: song.id,
+                            uid: currentUid,
+                            type: 'funny');
                       }
                     },
                   ),
@@ -756,11 +939,24 @@ class _SongItemWithReactions extends StatelessWidget {
                     icon: '😴',
                     count: reactionCounts['sleep'] ?? 0,
                     onTap: () async {
-                      final current = await firestoreService.getUserReaction(groupId: groupId, weekId: weekId, songId: song.id, uid: currentUid);
+                      final current = await firestoreService.getUserReaction(
+                          groupId: groupId,
+                          weekId: weekId,
+                          songId: song.id,
+                          uid: currentUid);
                       if (current == 'sleep') {
-                        await firestoreService.removeReaction(groupId: groupId, weekId: weekId, songId: song.id, uid: currentUid);
+                        await firestoreService.removeReaction(
+                            groupId: groupId,
+                            weekId: weekId,
+                            songId: song.id,
+                            uid: currentUid);
                       } else {
-                        await firestoreService.addReaction(groupId: groupId, weekId: weekId, songId: song.id, uid: currentUid, type: 'sleep');
+                        await firestoreService.addReaction(
+                            groupId: groupId,
+                            weekId: weekId,
+                            songId: song.id,
+                            uid: currentUid,
+                            type: 'sleep');
                       }
                     },
                   ),
@@ -779,7 +975,8 @@ class _ReactionButton extends StatelessWidget {
   final int count;
   final VoidCallback onTap;
 
-  const _ReactionButton({required this.icon, required this.count, required this.onTap});
+  const _ReactionButton(
+      {required this.icon, required this.count, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -789,16 +986,24 @@ class _ReactionButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: count > 0 ? theme.colorScheme.primary.withValues(alpha: 0.2) : theme.scaffoldBackgroundColor,
+          color: count > 0
+              ? theme.colorScheme.primary.withValues(alpha: 0.2)
+              : theme.scaffoldBackgroundColor,
           borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-          border: Border.all(color: count > 0 ? theme.colorScheme.primary : theme.dividerColor, width: 2),
+          border: Border.all(
+              color: count > 0 ? theme.colorScheme.primary : theme.dividerColor,
+              width: 2),
         ),
         child: Row(
           children: [
             Text(icon, style: const TextStyle(fontSize: 16)),
             if (count > 0) ...[
               const SizedBox(width: 4),
-              Text('$count', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+              Text('$count',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface)),
             ],
           ],
         ),
@@ -835,9 +1040,15 @@ class _EpisodeItem extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: AppTheme.spacingMd),
       padding: const EdgeInsets.all(AppTheme.spacingMd),
       decoration: BoxDecoration(
-        color: isPlaying ? theme.colorScheme.primary.withValues(alpha: 0.1) : theme.colorScheme.surface,
+        color: isPlaying
+            ? theme.colorScheme.primary.withValues(alpha: 0.1)
+            : theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: isPlaying ? theme.colorScheme.primary : theme.colorScheme.onSurface, width: 2),
+        border: Border.all(
+            color: isPlaying
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurface,
+            width: 2),
         boxShadow: AppTheme.shadowSm,
       ),
       child: Row(
@@ -855,15 +1066,29 @@ class _EpisodeItem extends StatelessWidget {
                       errorBuilder: (_, __, ___) => Container(
                         width: 80,
                         height: 60,
-                        color: isDark ? AppTheme.darkSecondary : AppTheme.lightSecondary,
-                        child: Icon(isPlaying ? Icons.pause : Icons.play_arrow_rounded, color: isDark ? AppTheme.darkOnSecondary : AppTheme.lightOnPrimary, size: 32),
+                        color: isDark
+                            ? AppTheme.darkSecondary
+                            : AppTheme.lightSecondary,
+                        child: Icon(
+                            isPlaying ? Icons.pause : Icons.play_arrow_rounded,
+                            color: isDark
+                                ? AppTheme.darkOnSecondary
+                                : AppTheme.lightOnPrimary,
+                            size: 32),
                       ),
                     )
                   : Container(
                       width: 80,
                       height: 60,
-                      color: isDark ? AppTheme.darkSecondary : AppTheme.lightSecondary,
-                      child: Icon(isPlaying ? Icons.pause : Icons.play_arrow_rounded, color: isDark ? AppTheme.darkOnSecondary : AppTheme.lightOnPrimary, size: 32),
+                      color: isDark
+                          ? AppTheme.darkSecondary
+                          : AppTheme.lightSecondary,
+                      child: Icon(
+                          isPlaying ? Icons.pause : Icons.play_arrow_rounded,
+                          color: isDark
+                              ? AppTheme.darkOnSecondary
+                              : AppTheme.lightOnPrimary,
+                          size: 32),
                     ),
             ),
           ),
@@ -876,7 +1101,9 @@ class _EpisodeItem extends StatelessWidget {
                   episode.showTitle,
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800,
-                    color: isDark ? AppTheme.darkPrimaryText : AppTheme.lightPrimaryText,
+                    color: isDark
+                        ? AppTheme.darkPrimaryText
+                        : AppTheme.lightPrimaryText,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -884,7 +1111,9 @@ class _EpisodeItem extends StatelessWidget {
                 Text(
                   episode.episodeTitle,
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: isDark ? AppTheme.darkSecondaryText : AppTheme.lightSecondaryText,
+                    color: isDark
+                        ? AppTheme.darkSecondaryText
+                        : AppTheme.lightSecondaryText,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -902,8 +1131,11 @@ class _EpisodeItem extends StatelessWidget {
                       ),
                       child: Center(
                         child: Text(
-                          episode.addedByName.isNotEmpty ? episode.addedByName.substring(0, 1) : "?",
-                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                          episode.addedByName.isNotEmpty
+                              ? episode.addedByName.substring(0, 1)
+                              : "?",
+                          style: const TextStyle(
+                              fontSize: 10, fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),
@@ -922,7 +1154,8 @@ class _EpisodeItem extends StatelessWidget {
           ),
           if (canDelete)
             IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+              icon:
+                  const Icon(Icons.delete_outline, color: Colors.red, size: 20),
               onPressed: onDelete,
             ),
         ],

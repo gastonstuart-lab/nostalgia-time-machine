@@ -12,87 +12,102 @@ import 'screens/nostalgia_assistant.dart';
 import 'screens/group_settings.dart';
 import 'screens/history.dart';
 import 'screens/group_chat.dart';
+import 'screens/weekly_quiz.dart';
+import 'screens/add_movie.dart';
+import 'screens/weekly_movies.dart';
 import 'state.dart';
 import 'theme.dart';
 
 class AppRouter {
   static GoRouter createRouter(NostalgiaProvider provider) => GoRouter(
-    initialLocation: AppRoutes.splash,
-    refreshListenable: provider,
-    redirect: (context, state) {
-      final isOnSplash = state.matchedLocation == AppRoutes.splash;
-      final isOnJoinCreate = state.matchedLocation == AppRoutes.joinCreate;
-      final isInitialized = provider.isInitialized;
-      final isGroupJoined = provider.isGroupJoined;
-      
-      // Show splash while initializing
-      if (!isInitialized && !isOnSplash) {
-        return AppRoutes.splash;
-      }
-      
-      // Once initialized, redirect from splash based on group status
-      if (isInitialized && isOnSplash) {
-        return isGroupJoined ? AppRoutes.dashboard : AppRoutes.joinCreate;
-      }
-      
-      // If user has a group and tries to visit join/create, redirect to dashboard
-      if (isGroupJoined && isOnJoinCreate) {
-        return AppRoutes.dashboard;
-      }
-      
-      return null; // No redirect needed
-    },
-    routes: [
-      GoRoute(
-        path: AppRoutes.splash,
-        builder: (context, state) => const SplashScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.joinCreate,
-        builder: (context, state) => const JoinCreateScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.dashboard,
-        builder: (context, state) => const WeeklyDashboardScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.addSong,
-        builder: (context, state) => const AddSongScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.addTV,
-        builder: (context, state) => const AddTVEpisodeScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.playlist,
-        builder: (context, state) => const GroupPlaylistScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.recap,
-        builder: (context, state) => const WeeklyRecapScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.share,
-        builder: (context, state) => const ShareExportScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.assistant,
-        builder: (context, state) => const NostalgiaAssistantScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.settings,
-        builder: (context, state) => const GroupSettingsScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.history,
-        builder: (context, state) => const HistoryScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.crewChat,
-        builder: (context, state) => const GroupChatScreen(),
-      ),
-    ],
-  );
+        initialLocation: AppRoutes.splash,
+        refreshListenable: provider,
+        redirect: (context, state) {
+          final isOnSplash = state.matchedLocation == AppRoutes.splash;
+          final isOnJoinCreate = state.matchedLocation == AppRoutes.joinCreate;
+          final isInitialized = provider.isInitialized;
+          final isGroupJoined = provider.isGroupJoined;
+
+          // Show splash while initializing
+          if (!isInitialized && !isOnSplash) {
+            return AppRoutes.splash;
+          }
+
+          // Once initialized, redirect from splash based on group status
+          if (isInitialized && isOnSplash) {
+            return isGroupJoined ? AppRoutes.dashboard : AppRoutes.joinCreate;
+          }
+
+          // If user has a group and tries to visit join/create, redirect to dashboard
+          if (isGroupJoined && isOnJoinCreate) {
+            return AppRoutes.dashboard;
+          }
+
+          return null; // No redirect needed
+        },
+        routes: [
+          GoRoute(
+            path: AppRoutes.splash,
+            builder: (context, state) => const SplashScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.joinCreate,
+            builder: (context, state) => const JoinCreateScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.dashboard,
+            builder: (context, state) => const WeeklyDashboardScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.addSong,
+            builder: (context, state) => const AddSongScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.addTV,
+            builder: (context, state) => const AddTVEpisodeScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.playlist,
+            builder: (context, state) => const GroupPlaylistScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.recap,
+            builder: (context, state) => const WeeklyRecapScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.share,
+            builder: (context, state) => const ShareExportScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.assistant,
+            builder: (context, state) => const NostalgiaAssistantScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.settings,
+            builder: (context, state) => const GroupSettingsScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.history,
+            builder: (context, state) => const HistoryScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.crewChat,
+            builder: (context, state) => const GroupChatScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.weeklyQuiz,
+            builder: (context, state) => const WeeklyQuizScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.addMovie,
+            builder: (context, state) => const AddMovieScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.weeklyMovies,
+            builder: (context, state) => const WeeklyMoviesScreen(),
+          ),
+        ],
+      );
 }
 
 class AppRoutes {
@@ -108,6 +123,9 @@ class AppRoutes {
   static const String settings = '/settings';
   static const String history = '/history';
   static const String crewChat = '/crew-chat';
+  static const String weeklyQuiz = '/weekly-quiz';
+  static const String addMovie = '/add-movie';
+  static const String weeklyMovies = '/movies';
 }
 
 class SplashScreen extends StatelessWidget {
@@ -116,9 +134,9 @@ class SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<NostalgiaProvider>();
-    
+
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.background,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -144,17 +162,17 @@ class SplashScreen extends StatelessWidget {
             Text(
               'Nostalgia Time Machine',
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w900,
-              ),
+                    fontWeight: FontWeight.w900,
+                  ),
             ),
             const SizedBox(height: AppTheme.spacingSm),
             if (provider.isGroupJoined && provider.currentUserProfile != null)
               Text(
                 'Welcome back, ${provider.currentUserProfile!.displayName}! 👋',
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
-                  fontWeight: FontWeight.bold,
-                ),
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
               )
             else
               const CircularProgressIndicator(),

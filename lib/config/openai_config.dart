@@ -3,22 +3,37 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 
 class OpenAIConfig {
-  static const apiKey = String.fromEnvironment('OPENAI_PROXY_API_KEY');
-  static const endpoint = String.fromEnvironment('OPENAI_PROXY_ENDPOINT');
+  static const _proxyApiKey = String.fromEnvironment('OPENAI_PROXY_API_KEY');
+  static const _proxyEndpoint = String.fromEnvironment('OPENAI_PROXY_ENDPOINT');
+  static const _openAIApiKey = String.fromEnvironment('OPENAI_API_KEY');
+  static const _openAIEndpoint = String.fromEnvironment('OPENAI_ENDPOINT');
+
+  static String get apiKey =>
+      _proxyApiKey.isNotEmpty ? _proxyApiKey : _openAIApiKey;
+  static String get endpoint {
+    if (_proxyEndpoint.isNotEmpty) return _proxyEndpoint;
+    if (_openAIEndpoint.isNotEmpty) return _openAIEndpoint;
+    if (apiKey.isNotEmpty) {
+      return 'https://api.openai.com/v1/chat/completions';
+    }
+    return '';
+  }
 
   static Future<String> generateChatResponse({
     required List<Map<String, String>> messages,
     required int year,
   }) async {
     if (apiKey.isEmpty || endpoint.isEmpty) {
-      debugPrint('❌ OpenAI configuration missing');
+      debugPrint(
+          '❌ OpenAI configuration missing (expected OPENAI_PROXY_* or OPENAI_* dart-defines)');
       return 'AI configuration error. Please contact support.';
     }
 
     try {
       debugPrint('🤖 Generating AI response for year: $year');
-      
-      final systemPrompt = '''You are a nostalgic AI assistant specialized in music and TV from the year $year. 
+
+      final systemPrompt =
+          '''You are a nostalgic AI assistant specialized in music and TV from the year $year. 
 You help users discover and remember songs, TV shows, movies, and cultural moments from $year.
 
 Guidelines:
@@ -51,12 +66,12 @@ Guidelines:
       if (response.statusCode == 200) {
         final data = jsonDecode(utf8.decode(response.bodyBytes));
         final content = data['choices']?[0]?['message']?['content'] as String?;
-        
+
         if (content != null && content.isNotEmpty) {
           debugPrint('✅ AI response generated');
           return content;
         }
-        
+
         debugPrint('⚠️ Empty AI response');
         return 'Sorry, I couldn\'t generate a response. Try again!';
       } else {
