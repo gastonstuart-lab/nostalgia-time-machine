@@ -1,6 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    match /year_news/{year} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
 
     // Users can only access their own profile
     match /users/{userId} {

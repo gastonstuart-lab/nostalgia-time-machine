@@ -19,22 +19,34 @@ class YouTubeService {
   /// Get the configured API key
   static String? get apiKey => _apiKey;
   
-  /// Search for YouTube videos
-  Future<List<YouTubeSearchResult>> searchVideos(String query, {int maxResults = 10}) async {
+  /// Search for YouTube videos.
+  ///
+  /// `videoCategoryId` is optional:
+  /// - Use `'10'` for music-focused search.
+  /// - Omit for broader search (e.g. TV episodes, movie trailers).
+  Future<List<YouTubeSearchResult>> searchVideos(
+    String query, {
+    int maxResults = 10,
+    String? videoCategoryId,
+  }) async {
     if (_apiKey == null || _apiKey!.isEmpty) {
       debugPrint('YouTube API key not configured');
       throw Exception('YouTube API key not configured. Please set it using YouTubeService.setApiKey()');
     }
     
     try {
-      final uri = Uri.parse('$_baseUrl/search').replace(queryParameters: {
+      final params = <String, String>{
         'part': 'snippet',
         'q': query,
         'type': 'video',
         'maxResults': maxResults.toString(),
         'key': _apiKey!,
-        'videoCategoryId': '10', // Music category
-      });
+      };
+      if (videoCategoryId != null && videoCategoryId.isNotEmpty) {
+        params['videoCategoryId'] = videoCategoryId;
+      }
+
+      final uri = Uri.parse('$_baseUrl/search').replace(queryParameters: params);
       
       final response = await http.get(uri).timeout(const Duration(seconds: 15));
       

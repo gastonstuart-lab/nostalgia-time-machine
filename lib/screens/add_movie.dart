@@ -3,8 +3,11 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:nostalgia_time_machine/components/theme_toggle.dart';
 import 'package:nostalgia_time_machine/services/firestore_service.dart';
+import 'package:nostalgia_time_machine/services/movie_discovery_service.dart';
 import 'package:nostalgia_time_machine/state.dart';
 import 'package:nostalgia_time_machine/theme.dart';
+import 'package:nostalgia_time_machine/models/movie_discovery_result.dart';
+import 'package:nostalgia_time_machine/components/movie_trailer_sheet.dart';
 
 class AddMovieScreen extends StatefulWidget {
   const AddMovieScreen({super.key});
@@ -14,15 +17,18 @@ class AddMovieScreen extends StatefulWidget {
 }
 
 class _AddMovieScreenState extends State<AddMovieScreen> {
-  final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _yearController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
   final FirestoreService _firestoreService = FirestoreService();
+  final MovieDiscoveryService _movieDiscoveryService = MovieDiscoveryService();
+  List<MovieDiscoveryResult> _results = [];
+  MovieDiscoveryResult? _selectedMovie;
+  String? _errorMessage;
+  bool _searching = false;
   bool _saving = false;
 
   @override
   void dispose() {
-    _titleController.dispose();
-    _yearController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -57,7 +63,65 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
     );
   }
 
-  Future<void> _saveMovie() async {
+  Future<void> _searchMovies(int year) async {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) return;
+
+    setState(() {
+      _searching = true;
+      _errorMessage = null;
+    });
+    try {
+      final results =
+          await _movieDiscoveryService.searchMovies(query, yearHint: year);
+      if (!mounted) return;
+      setState(() {
+        _results = results;
+        _selectedMovie = null;
+        if (results.isEmpty) {
+          _errorMessage =
+              'No movie matches found for "$query". Try another title, actor, or quote.';
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = 'Could not search movies right now. Please try again.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _searching = false);
+      }
+    }
+  }
+
+  bool _isYearMatch(MovieDiscoveryResult movie, int targetYear) {
+    return movie.year != null && movie.year == targetYear;
+  }
+
+  Future<void> _previewTrailer(MovieDiscoveryResult movie, int year) async {
+    try {
+      final trailerId = await _movieDiscoveryService.findTrailerVideoId(
+        title: movie.title,
+        year: movie.year ?? year,
+      );
+      if (!mounted) return;
+      await showMovieTrailerSheet(
+        context,
+        title: movie.title,
+        trailerYoutubeId: trailerId,
+        trailerYoutubeUrl:
+            trailerId == null ? null : 'https://www.youtube.com/watch?v=$trailerId',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to open trailer: $e')),
+      );
+    }
+  }
+
+  Future<void> _saveMovie(int targetYear) async {
     final provider = context.read<NostalgiaProvider>();
     final groupId = provider.currentGroup?.id;
     final weekId = provider.currentWeekId;
@@ -65,10 +129,18 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
 
     if (groupId == null || weekId == null || userId.isEmpty) return;
 
-    final title = _titleController.text.trim();
-    if (title.isEmpty) {
+    final selected = _selectedMovie;
+    if (selected == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Movie title is required.')),
+        const SnackBar(content: Text('Select a movie result first.')),
+      );
+      return;
+    }
+    if (!_isYearMatch(selected, targetYear)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content:
+                Text('That movie is not a $targetYear release. Pick a $targetYear movie.')),
       );
       return;
     }
@@ -80,15 +152,23 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
       return;
     }
 
-    final parsedYear = int.tryParse(_yearController.text.trim());
-
     setState(() => _saving = true);
     try {
+      final trailerId = await _movieDiscoveryService.findTrailerVideoId(
+        title: selected.title,
+        year: selected.year ?? targetYear,
+      );
       await _firestoreService.addMovie(
         groupId: groupId,
         weekId: weekId,
-        title: title,
-        year: parsedYear,
+        title: selected.title,
+        year: selected.year ?? targetYear,
+        posterUrl: selected.posterUrl,
+        overview: selected.overview,
+        genre: selected.genre,
+        trailerYoutubeId: trailerId,
+        trailerYoutubeUrl:
+            trailerId == null ? null : 'https://www.youtube.com/watch?v=$trailerId',
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -115,8 +195,16 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
   Widget build(BuildContext context) {
     final year =
         context.watch<NostalgiaProvider>().currentGroup?.currentYear ?? 1990;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final surface = theme.colorScheme.surface;
+    final onSurface = theme.colorScheme.onSurface;
+    final accent = theme.colorScheme.tertiary;
+    final secondaryText =
+        isDark ? AppTheme.darkSecondaryText : AppTheme.lightSecondaryText;
+    final divider = theme.dividerColor;
     return Scaffold(
-      backgroundColor: AppTheme.lightBackground,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         leading: IconButton(
           icon:
@@ -124,15 +212,20 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
           onPressed: () => context.pop(),
         ),
         title: Text(
-          'Pick a Movie',
+          'Pick a Movie ($year)',
           style: Theme.of(context)
               .textTheme
               .headlineSmall
               ?.copyWith(fontWeight: FontWeight.w900),
         ),
-        actions: const [
-          ThemeToggle(),
-          SizedBox(width: 16),
+        actions: [
+          IconButton(
+            tooltip: 'Ask AI Assistant',
+            onPressed: () => context.push('/assistant'),
+            icon: Icon(Icons.smart_toy_rounded, color: theme.colorScheme.primary),
+          ),
+          const ThemeToggle(),
+          const SizedBox(width: 16),
         ],
       ),
       body: SafeArea(
@@ -141,40 +234,168 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'Weekly Movie Pick ($year)',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: AppTheme.lightPrimaryText,
+              Container(
+                padding: const EdgeInsets.all(AppTheme.spacingMd),
+                decoration: BoxDecoration(
+                  color: surface,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                  border: Border.all(color: accent, width: 2),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.auto_awesome_rounded, color: accent),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'AI Movie Finder: type what you remember, then pick a confirmed $year release.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: onSurface,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
                     ),
-              ),
-              const SizedBox(height: AppTheme.spacingMd),
-              TextField(
-                controller: _titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Movie title',
-                  helperText: 'Required',
+                  ],
                 ),
               ),
               const SizedBox(height: AppTheme.spacingMd),
-              TextField(
-                controller: _yearController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Year',
-                  helperText: 'Optional',
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppTheme.spacingMd, vertical: 4),
+                decoration: BoxDecoration(
+                  color: surface,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  border: Border.all(color: onSurface, width: 3),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.search_rounded, color: onSurface),
+                    const SizedBox(width: AppTheme.spacingMd),
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        style: TextStyle(color: onSurface),
+                        cursorColor: onSurface,
+                        decoration: const InputDecoration(
+                          filled: false,
+                          hintText:
+                              'Search movie title, actor, scene, quote...',
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                        ),
+                        onSubmitted: (_) => _searchMovies(year),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _searching ? null : () => _searchMovies(year),
+                      child: _searching
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('SEARCH'),
+                    ),
+                  ],
                 ),
               ),
+              if (_errorMessage != null) ...[
+                const SizedBox(height: AppTheme.spacingMd),
+                Text(
+                  _errorMessage!,
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ],
               const SizedBox(height: AppTheme.spacingLg),
+              if (_results.isEmpty && !_searching)
+                Text(
+                  'Search for movies from $year.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: secondaryText,
+                      ),
+                ),
+              ..._results.map(
+                (movie) {
+                  final isMatch = _isYearMatch(movie, year);
+                  final isSelected = _selectedMovie == movie;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: AppTheme.spacingMd),
+                    decoration: BoxDecoration(
+                      color: surface,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                      border: Border.all(
+                        color: isSelected
+                            ? theme.colorScheme.primary
+                            : (isMatch ? divider : Colors.red.shade300),
+                        width: 2,
+                      ),
+                    ),
+                    child: ListTile(
+                      leading: movie.posterUrl.isNotEmpty
+                          ? ClipRRect(
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.radiusSm),
+                              child: Image.network(
+                                movie.posterUrl,
+                                width: 50,
+                                height: 70,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Icon(
+                                    Icons.local_movies_rounded,
+                                    color: AppTheme.lightPrimary),
+                              ),
+                            )
+                          : const Icon(Icons.local_movies_rounded,
+                              color: AppTheme.lightPrimary),
+                      title: Text(
+                        movie.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        '${movie.year ?? 'Unknown year'}'
+                        '${movie.genre.isNotEmpty ? ' • ${movie.genre}' : ''}\n'
+                        '${isMatch ? 'Matches $year' : 'Not a $year release'}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: Wrap(
+                        spacing: 6,
+                        children: [
+                          IconButton(
+                            tooltip: 'Preview trailer',
+                            onPressed: () => _previewTrailer(movie, year),
+                            icon: const Icon(Icons.play_circle_fill_rounded),
+                          ),
+                          IconButton(
+                            tooltip: isMatch
+                                ? 'Select movie'
+                                : 'Not released in $year',
+                            onPressed: isMatch
+                                ? () => setState(() => _selectedMovie = movie)
+                                : null,
+                            icon: Icon(
+                              isSelected
+                                  ? Icons.check_circle_rounded
+                                  : Icons.add_circle_outline_rounded,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: AppTheme.spacingMd),
               ElevatedButton(
-                onPressed: _saving ? null : _saveMovie,
+                onPressed: _saving ? null : () => _saveMovie(year),
                 child: _saving
                     ? const SizedBox(
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Save Movie Pick'),
+                    : Text('Confirm Movie Pick for $year'),
               ),
             ],
           ),

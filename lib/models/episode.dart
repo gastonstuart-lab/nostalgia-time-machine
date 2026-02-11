@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/text_sanitizer.dart';
 
 class Episode {
   final String id;
@@ -36,8 +37,8 @@ class Episode {
 
   factory Episode.fromJson(String id, Map<String, dynamic> json) => Episode(
     id: id,
-    showTitle: json['showTitle'] ?? '',
-    episodeTitle: json['episodeTitle'] ?? '',
+    showTitle: decodeHtmlEntities((json['showTitle'] ?? '').toString()),
+    episodeTitle: decodeHtmlEntities((json['episodeTitle'] ?? '').toString()),
     youtubeId: json['youtubeId'] ?? '',
     youtubeUrl: json['youtubeUrl'] ?? '',
     decadeTag: json['decadeTag'] ?? 1990,

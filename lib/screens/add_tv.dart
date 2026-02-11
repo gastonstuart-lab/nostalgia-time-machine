@@ -3,9 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../theme.dart';
 import '../state.dart';
-import '../services/youtube_service.dart';
-import '../models/youtube_search_result.dart';
 import '../components/theme_toggle.dart';
+import '../components/movie_trailer_sheet.dart';
+import '../models/tv_discovery_result.dart';
+import '../services/tv_discovery_service.dart';
 
 class AddTVEpisodeScreen extends StatefulWidget {
   const AddTVEpisodeScreen({super.key});
@@ -16,10 +17,18 @@ class AddTVEpisodeScreen extends StatefulWidget {
 
 class _AddTVEpisodeScreenState extends State<AddTVEpisodeScreen> {
   final TextEditingController _searchController = TextEditingController();
-  final YouTubeService _youtubeService = YouTubeService();
-  List<YouTubeSearchResult> _results = [];
-  bool _isSearching = false;
+  final TvDiscoveryService _tvDiscoveryService = TvDiscoveryService();
+
+  List<TvDiscoveryResult> _results = [];
+  bool _searching = false;
+  bool _saving = false;
   String? _errorMessage;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   int _getUserEpisodeCount(NostalgiaProvider provider) {
     final uid = provider.currentUserProfile?.uid;
@@ -33,122 +42,160 @@ class _AddTVEpisodeScreenState extends State<AddTVEpisodeScreen> {
     return provider.currentGroup?.episodeCapPerUser ?? 1;
   }
 
-  Future<void> _search([String? queryOverride]) async {
+  bool _isYearMatch(TvDiscoveryResult show, int year) {
+    return show.isRunningInYear(year);
+  }
+
+  List<String> _suggestionsForYear(int year) {
+    if (year < 1985) {
+      return ['Classic Sitcoms', 'Detective Shows', 'Variety TV', 'Cartoons'];
+    }
+    if (year < 1995) {
+      return ['90s Sitcoms', 'Sci-Fi TV', 'Prime Time Drama', 'MTV Era Shows'];
+    }
+    if (year < 2005) {
+      return ['Y2K Shows', 'Teen Drama', 'Reality TV', 'Animation'];
+    }
+    return ['Prestige TV', 'Streaming Originals', 'Crime Drama', 'Comedy'];
+  }
+
+  Future<void> _searchShows(int year, {String? queryOverride}) async {
     final query = (queryOverride ?? _searchController.text).trim();
     if (query.isEmpty) return;
 
     setState(() {
-      _isSearching = true;
+      _searching = true;
       _errorMessage = null;
     });
-
     try {
-      final results = await _youtubeService.searchVideos(query, maxResults: 10);
-      if (mounted) {
-        setState(() {
-          _results = results;
-          _isSearching = false;
-        });
-      }
+      final results = await _tvDiscoveryService.searchShows(
+        query,
+        yearHint: year,
+      );
+      if (!mounted) return;
+      setState(() {
+        _results = results;
+        if (results.isEmpty) {
+          _errorMessage =
+              'No shows found for "$query". Try another title, actor, or genre.';
+        }
+      });
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isSearching = false;
-          _errorMessage = e.toString().contains('API key not configured')
-              ? 'YouTube API key not configured. Please add your API key in lib/config/youtube_config.dart'
-              : 'Failed to search YouTube. Please try again.';
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = 'Could not search shows right now. Please try again.';
+      });
+    } finally {
+      if (mounted) setState(() => _searching = false);
     }
   }
 
-  void _handleChipTap(String label) {
-    _searchController.text = label;
-    _search(label);
+  Future<void> _previewTrailer(TvDiscoveryResult show, int year) async {
+    try {
+      final trailerId = await _tvDiscoveryService.findTrailerVideoId(
+        showTitle: show.title,
+        year: show.premieredYear ?? year,
+      );
+      if (!mounted) return;
+      await showMovieTrailerSheet(
+        context,
+        title: show.title,
+        trailerYoutubeId: trailerId,
+        trailerYoutubeUrl:
+            trailerId == null ? null : 'https://www.youtube.com/watch?v=$trailerId',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to preview trailer: $e')),
+      );
+    }
   }
 
-  void _handleSuggest(int year) {
-    final queries = [
-      'best sitcom episode $year',
-      'classic TV episode $year',
-      '${year}s television episode',
-      'popular TV show $year',
-    ];
-    final query = queries[DateTime.now().millisecond % queries.length];
-    _searchController.text = query;
-    _search(query);
-  }
-
-  Future<void> _addEpisode(YouTubeSearchResult result) async {
+  Future<void> _pickShow(TvDiscoveryResult show, int year) async {
     final provider = context.read<NostalgiaProvider>();
     final userEpisodeCount = _getUserEpisodeCount(provider);
     final episodeCap = _getEpisodeCap(provider);
-
-    // Check limit before attempting
     if (userEpisodeCount >= episodeCap) {
-      if (!mounted) return;
       _showLimitDialog(episodeCap: episodeCap);
       return;
     }
-
-    final youtubeUrl = 'https://www.youtube.com/watch?v=${result.videoId}';
-
-    final success = await provider.addEpisode(
-      showTitle: result.title,
-      episodeTitle: result.channelTitle,
-      youtubeId: result.videoId,
-      youtubeUrl: youtubeUrl,
-    );
-
-    if (!mounted) return;
-
-    if (success) {
+    if (!_isYearMatch(show, year)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Added ${result.title} to the watchlist!")),
+        SnackBar(content: Text('${show.title} was not running in $year.')),
       );
-      context.pop();
-    } else {
-      final refreshedCount = _getUserEpisodeCount(provider);
-      if (refreshedCount >= episodeCap) {
-        _showLimitDialog(episodeCap: episodeCap);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text("Failed to add episode. Please try again.")),
-        );
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      final trailerId = await _tvDiscoveryService.findTrailerVideoId(
+        showTitle: show.title,
+        year: show.premieredYear ?? year,
+      );
+      if (trailerId == null || trailerId.isEmpty) {
+        throw Exception('No trailer found for this show.');
       }
+
+      final success = await provider.addEpisode(
+        showTitle: show.title,
+        episodeTitle: show.genresText.isEmpty
+            ? 'Official Trailer'
+            : '${show.genresText} • Official Trailer',
+        youtubeId: trailerId,
+        youtubeUrl: 'https://www.youtube.com/watch?v=$trailerId',
+      );
+
+      if (!mounted) return;
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Added ${show.title} to this week!')),
+        );
+        context.pop();
+      } else {
+        final refreshedCount = _getUserEpisodeCount(provider);
+        if (refreshedCount >= episodeCap) {
+          _showLimitDialog(episodeCap: episodeCap);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to add show. Please try again.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save show pick: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
   void _showLimitDialog({required int episodeCap}) {
+    final theme = Theme.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.lightSurface,
+        backgroundColor: theme.colorScheme.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          side: const BorderSide(color: AppTheme.lightOnSurface, width: 3),
+          side: BorderSide(color: theme.colorScheme.onSurface, width: 2),
         ),
         title: const Row(
           children: [
             Icon(Icons.error_outline, color: Colors.red, size: 28),
             SizedBox(width: 8),
-            Text('Episode Limit',
-                style: TextStyle(fontWeight: FontWeight.w900)),
+            Text('Episode Limit', style: TextStyle(fontWeight: FontWeight.w900)),
           ],
         ),
         content: Text(
           'You have reached your weekly cap ($episodeCap/$episodeCap episodes).',
-          style: TextStyle(color: AppTheme.lightPrimaryText),
         ),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              context.pop();
-            },
-            child: const Text('Go to Dashboard',
-                style: TextStyle(fontWeight: FontWeight.bold)),
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
           ),
         ],
       ),
@@ -163,30 +210,47 @@ class _AddTVEpisodeScreenState extends State<AddTVEpisodeScreen> {
     final episodeCap = _getEpisodeCap(provider);
     final year = group?.currentYear ?? 1990;
 
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final secondaryText =
+        isDark ? AppTheme.darkSecondaryText : AppTheme.lightSecondaryText;
+    final surface = theme.colorScheme.surface;
+    final onSurface = theme.colorScheme.onSurface;
+    final accent = theme.colorScheme.tertiary;
+
     return Scaffold(
-      backgroundColor: AppTheme.lightBackground,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         leading: IconButton(
-          icon:
-              Icon(Icons.arrow_back, color: Theme.of(context).iconTheme.color),
+          icon: Icon(Icons.arrow_back, color: theme.iconTheme.color),
           onPressed: () => context.pop(),
         ),
         title: Column(
           children: [
-            Text("TV TIME MACHINE",
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.w900)),
-            Text("THE ${year}s",
-                style: Theme.of(context)
-                    .textTheme
-                    .labelLarge
-                    ?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              "TV TIME MACHINE",
+              style: theme.textTheme.headlineSmall?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            Text(
+              "THE $year",
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: onSurface,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
-        actions: const [
-          ThemeToggle(),
-          SizedBox(width: 16),
+        actions: [
+          IconButton(
+            tooltip: 'Ask AI Assistant',
+            onPressed: () => context.push('/assistant'),
+            icon: Icon(Icons.smart_toy_rounded, color: theme.colorScheme.primary),
+          ),
+          const ThemeToggle(),
+          const SizedBox(width: 16),
         ],
       ),
       body: SafeArea(
@@ -195,340 +259,193 @@ class _AddTVEpisodeScreenState extends State<AddTVEpisodeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // AI Helper
               Container(
                 padding: const EdgeInsets.all(AppTheme.spacingLg),
                 decoration: BoxDecoration(
-                  color: AppTheme.lightPrimary,
+                  color: surface,
                   borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                  border: Border.all(color: AppTheme.lightOnSurface, width: 3),
-                  boxShadow: AppTheme.shadowMd,
+                  border: Border.all(color: accent, width: 2),
+                  boxShadow: AppTheme.shadowSm,
                 ),
                 child: Row(
                   children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: AppTheme.lightOnPrimary,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                            color: AppTheme.lightOnSurface, width: 2),
-                      ),
-                      child: const Icon(Icons.auto_awesome_rounded,
-                          color: AppTheme.lightPrimary, size: 24),
-                    ),
-                    const SizedBox(width: AppTheme.spacingMd),
+                    Icon(Icons.auto_awesome_rounded, color: accent, size: 26),
+                    const SizedBox(width: 10),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Nostalgia Assistant",
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelLarge
-                                ?.copyWith(
-                                  color: AppTheme.lightOnPrimary,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                          ),
-                          Text(
-                            "Want to see the top sitcoms from $year?",
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: AppTheme.lightOnPrimary,
-                                ),
-                          ),
-                        ],
+                      child: Text(
+                        'AI Show Finder: describe what you remember and pick a show that was running in $year.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: onSurface,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
-                    ElevatedButton(
-                      onPressed: () => _handleSuggest(year),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.lightAccent,
-                        foregroundColor: AppTheme.lightOnSurface,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                      ),
-                      child: const Text("Suggest"),
                     ),
                   ],
                 ),
               ),
-
-              const SizedBox(height: AppTheme.spacingLg),
-
-              // Search
-              Text("Search YouTube for an episode",
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: AppTheme.lightOnSurface,
-                      fontWeight: FontWeight.bold)),
-              const SizedBox(height: AppTheme.spacingSm),
+              const SizedBox(height: AppTheme.spacingMd),
+              Wrap(
+                spacing: AppTheme.spacingSm,
+                runSpacing: AppTheme.spacingSm,
+                children: _suggestionsForYear(year)
+                    .map((label) => ActionChip(
+                          label: Text(label),
+                          onPressed: () {
+                            _searchController.text = '$label $year';
+                            _searchShows(year, queryOverride: '$label $year');
+                          },
+                        ))
+                    .toList(),
+              ),
+              const SizedBox(height: AppTheme.spacingMd),
               Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: AppTheme.spacingMd, vertical: 4),
+                  horizontal: AppTheme.spacingMd,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
-                  color: AppTheme.lightSurface,
+                  color: surface,
                   borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                  border: Border.all(color: AppTheme.lightOnSurface, width: 3),
+                  border: Border.all(color: onSurface, width: 2),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.search_rounded,
-                        color: AppTheme.lightOnSurface),
+                    Icon(Icons.search_rounded, color: onSurface),
                     const SizedBox(width: AppTheme.spacingMd),
                     Expanded(
                       child: TextField(
                         controller: _searchController,
+                        style: TextStyle(color: onSurface),
+                        cursorColor: onSurface,
                         decoration: const InputDecoration(
-                          hintText: "Show name or episode title...",
+                          filled: false,
+                          hintText: 'Search show title, actor, vibe, network...',
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
                           focusedBorder: InputBorder.none,
                         ),
-                        onSubmitted: (_) => _search(),
+                        onSubmitted: (_) => _searchShows(year),
                       ),
                     ),
-                    GestureDetector(
-                      onTap: _search,
-                      child: const Icon(Icons.arrow_forward_rounded,
-                          color: AppTheme.lightOnSurface),
+                    TextButton(
+                      onPressed: _searching || _saving
+                          ? null
+                          : () => _searchShows(year),
+                      child: _searching
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('SEARCH'),
                     ),
                   ],
                 ),
               ),
-
-              const SizedBox(height: AppTheme.spacingMd),
-
-              // Chips
-              Wrap(
-                spacing: AppTheme.spacingSm,
-                runSpacing: AppTheme.spacingSm,
-                children: [
-                  _SuggestionChip(
-                      icon: Icons.theater_comedy_rounded,
-                      label: "Sitcoms",
-                      onTap: () => _handleChipTap("Sitcoms")),
-                  _SuggestionChip(
-                      icon: Icons.travel_explore_rounded,
-                      label: "Sci-Fi",
-                      onTap: () => _handleChipTap("Sci-Fi")),
-                  _SuggestionChip(
-                      icon: Icons.child_care_rounded,
-                      label: "Cartoons",
-                      onTap: () => _handleChipTap("Cartoons")),
-                  _SuggestionChip(
-                      icon: Icons.menu_book_rounded,
-                      label: "Drama",
-                      onTap: () => _handleChipTap("Drama")),
-                ],
-              ),
-
-              const SizedBox(height: AppTheme.spacingMd),
-              const Divider(color: AppTheme.lightOnSurface, thickness: 2),
-              const SizedBox(height: AppTheme.spacingMd),
-
-              // Results
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text("Search Results",
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          color: AppTheme.lightOnSurface)),
-                ],
-              ),
-              const SizedBox(height: AppTheme.spacingMd),
-
-              if (_errorMessage != null)
-                Container(
-                  padding: const EdgeInsets.all(AppTheme.spacingMd),
-                  margin: const EdgeInsets.only(bottom: AppTheme.spacingMd),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                    border: Border.all(color: Colors.red, width: 2),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.error_outline, color: Colors.red),
-                      const SizedBox(width: AppTheme.spacingSm),
-                      Expanded(
-                        child: Text(
-                          _errorMessage!,
-                          style:
-                              const TextStyle(color: Colors.red, fontSize: 12),
-                        ),
-                      ),
-                    ],
-                  ),
+              if (_errorMessage != null) ...[
+                const SizedBox(height: AppTheme.spacingSm),
+                Text(
+                  _errorMessage!,
+                  style: const TextStyle(color: Colors.red),
                 ),
-
-              if (_isSearching)
-                const Center(child: CircularProgressIndicator())
-              else if (_results.isNotEmpty)
-                ..._results.map((result) => _TVResultCard(
-                      result: result,
-                      onAdd: () => _addEpisode(result),
-                      isDisabled: userEpisodeCount >= episodeCap,
-                    ))
-              else
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppTheme.spacingXl),
-                    child: Text(
-                      "Search for TV shows from $year!",
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: AppTheme.lightSecondaryText),
+              ],
+              const SizedBox(height: AppTheme.spacingMd),
+              Text(
+                '$userEpisodeCount / $episodeCap used this week',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: secondaryText,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: AppTheme.spacingMd),
+              if (_results.isEmpty && !_searching)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppTheme.spacingLg),
+                  child: Text(
+                    'Find TV shows that were running in $year.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: secondaryText,
                     ),
                   ),
                 ),
+              ..._results.map(
+                (show) {
+                  final isMatch = _isYearMatch(show, year);
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: AppTheme.spacingMd),
+                    decoration: BoxDecoration(
+                      color: surface,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                      border: Border.all(
+                        color: isMatch ? theme.dividerColor : Colors.red.shade300,
+                        width: 2,
+                      ),
+                    ),
+                    child: ListTile(
+                      leading: show.posterUrl.isNotEmpty
+                          ? ClipRRect(
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.radiusSm),
+                              child: Image.network(
+                                show.posterUrl,
+                                width: 50,
+                                height: 70,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Icon(
+                                  Icons.tv_rounded,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                            )
+                          : Icon(Icons.tv_rounded, color: theme.colorScheme.primary),
+                      title: Text(
+                        show.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        '${show.runRangeText}'
+                        '${show.genresText.isNotEmpty ? ' • ${show.genresText}' : ''}\n'
+                        '${isMatch ? 'Running in $year' : 'Not running in $year'}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: Wrap(
+                        spacing: 4,
+                        children: [
+                          IconButton(
+                            tooltip: 'Preview trailer',
+                            onPressed: _saving ? null : () => _previewTrailer(show, year),
+                            icon: Icon(Icons.play_circle_fill_rounded,
+                                color: theme.colorScheme.primary),
+                          ),
+                          IconButton(
+                            tooltip: isMatch ? 'Pick this show' : 'Not running in $year',
+                            onPressed:
+                                _saving || !isMatch ? null : () => _pickShow(show, year),
+                            icon: Icon(
+                              Icons.check_circle_rounded,
+                              color: isMatch
+                                  ? theme.colorScheme.secondary
+                                  : theme.disabledColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: AppTheme.spacingSm),
+              OutlinedButton.icon(
+                onPressed: () => context.push('/assistant'),
+                icon: const Icon(Icons.chat_bubble_outline_rounded),
+                label: const Text('Need help? Ask Nostalgia Assistant'),
+              ),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _SuggestionChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  const _SuggestionChip(
-      {required this.icon, required this.label, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppTheme.lightSurface,
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          border: Border.all(color: AppTheme.lightOnSurface, width: 2),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 18, color: AppTheme.lightPrimary),
-            const SizedBox(width: 8),
-            Text(label,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: AppTheme.lightPrimaryText,
-                    fontWeight: FontWeight.bold)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TVResultCard extends StatelessWidget {
-  final YouTubeSearchResult result;
-  final VoidCallback onAdd;
-  final bool isDisabled;
-
-  const _TVResultCard({
-    required this.result,
-    required this.onAdd,
-    this.isDisabled = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppTheme.spacingMd),
-      decoration: BoxDecoration(
-        color: AppTheme.lightSurface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        border: Border.all(color: AppTheme.lightOnSurface, width: 3),
-        boxShadow: AppTheme.shadowSm,
-      ),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(9),
-              bottomLeft: Radius.circular(9),
-            ),
-            child: result.thumbnailUrl.isNotEmpty
-                ? Image.network(
-                    result.thumbnailUrl,
-                    width: 120,
-                    height: 90,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      width: 120,
-                      height: 90,
-                      color: AppTheme.lightSecondary,
-                      child: const Icon(Icons.tv,
-                          color: AppTheme.lightOnPrimary, size: 40),
-                    ),
-                  )
-                : Container(
-                    width: 120,
-                    height: 90,
-                    color: AppTheme.lightSecondary,
-                    child: const Icon(Icons.tv,
-                        color: AppTheme.lightOnPrimary, size: 40),
-                  ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(AppTheme.spacingMd),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    result.title,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.lightPrimaryText,
-                        ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(Icons.person,
-                          size: 12, color: AppTheme.lightSecondaryText),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          result.channelTitle,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: AppTheme.lightSecondaryText),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          IconButton(
-            onPressed: isDisabled ? null : onAdd,
-            icon: Icon(
-              Icons.add_circle,
-              color: isDisabled ? Colors.grey : AppTheme.lightPrimary,
-              size: 32,
-            ),
-          ),
-          const SizedBox(width: AppTheme.spacingSm),
-        ],
       ),
     );
   }

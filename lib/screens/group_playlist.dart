@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../theme.dart';
 import '../state.dart';
 import '../models/song.dart';
 import '../models/episode.dart';
 import '../services/firestore_service.dart';
+import '../services/playback_service.dart';
 import '../nav.dart';
+import '../components/theme_toggle.dart';
 
 class GroupPlaylistScreen extends StatefulWidget {
   const GroupPlaylistScreen({super.key});
@@ -17,9 +19,9 @@ class GroupPlaylistScreen extends StatefulWidget {
 }
 
 class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
-  late YoutubePlayerController _controller;
   Song? _currentSong;
   Episode? _currentEpisode;
+  bool _embedLoadError = false;
   bool _isPlayAllActive = false;
   int _currentIndex = 0;
   String _selectedTab = 'Songs';
@@ -30,50 +32,201 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
   @override
   void initState() {
     super.initState();
-    _controller = YoutubePlayerController.fromVideoId(
-      videoId: 'dQw4w9WgXcQ',
-      autoPlay: false,
-      params: const YoutubePlayerParams(showFullscreenButton: true),
-    );
-    _controller.listen(_onPlayerStateChange);
   }
 
   @override
   void dispose() {
-    _controller.close();
     super.dispose();
   }
 
-  void _onPlayerStateChange(YoutubePlayerValue value) {
-    if (value.playerState == PlayerState.ended && _isPlayAllActive) {
-      _playNext();
+  String? _extractVideoId(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty) return null;
+
+    final idRegex = RegExp(r'^[a-zA-Z0-9_-]{11}$');
+    if (idRegex.hasMatch(value)) return value;
+
+    final uri = Uri.tryParse(value);
+    if (uri == null) return null;
+
+    if (uri.host.contains('youtu.be')) {
+      final first = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
+      return idRegex.hasMatch(first) ? first : null;
     }
+
+    final fromQuery = uri.queryParameters['v'];
+    if (fromQuery != null && idRegex.hasMatch(fromQuery)) return fromQuery;
+
+    final embedIndex = uri.pathSegments.indexOf('embed');
+    if (embedIndex != -1 && embedIndex + 1 < uri.pathSegments.length) {
+      final embedId = uri.pathSegments[embedIndex + 1];
+      if (idRegex.hasMatch(embedId)) return embedId;
+    }
+
+    return null;
   }
 
-  void _playSong(Song song) {
+  String? _videoIdForSong(Song song) {
+    return _extractVideoId(song.youtubeId) ?? _extractVideoId(song.youtubeUrl);
+  }
+
+  String? _videoIdForEpisode(Episode episode) {
+    return _extractVideoId(episode.youtubeId) ??
+        _extractVideoId(episode.youtubeUrl);
+  }
+
+  Future<void> _openCurrentInYouTube() async {
+    final songId = _currentSong != null ? _videoIdForSong(_currentSong!) : null;
+    final episodeId =
+        _currentEpisode != null ? _videoIdForEpisode(_currentEpisode!) : null;
+    final id = songId ?? episodeId;
+
+    Uri? target;
+    if (id != null) {
+      target = Uri.parse('https://www.youtube.com/watch?v=$id');
+    } else if (_currentSong?.youtubeUrl.isNotEmpty == true) {
+      target = Uri.tryParse(_currentSong!.youtubeUrl);
+    } else if (_currentEpisode?.youtubeUrl.isNotEmpty == true) {
+      target = Uri.tryParse(_currentEpisode!.youtubeUrl);
+    }
+
+    if (target == null) return;
+    await launchUrl(target, mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _playSong(Song song) async {
     setState(() {
       _currentSong = song;
       _currentEpisode = null;
+      _embedLoadError = false;
     });
-    if (song.youtubeId.isNotEmpty && song.youtubeId != "mock_video_id") {
-      _controller.loadVideoById(videoId: song.youtubeId);
-    } else {
-      _controller.loadVideoById(videoId: 'dQw4w9WgXcQ');
+
+    final selectedVideoId = _videoIdForSong(song);
+    if (selectedVideoId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This song has an invalid YouTube URL.')),
+        );
+      }
+      return;
     }
-    _controller.playVideo();
+
+    final provider = context.read<NostalgiaProvider>();
+    final sourceSongs =
+        _isPlayAllActive && _playQueue.isNotEmpty ? _playQueue : provider.songs;
+    final queue = sourceSongs
+        .map((s) {
+          final id = _videoIdForSong(s);
+          if (id == null) return null;
+          return PlaybackQueueItem(
+            videoId: id,
+            title: s.title,
+            subtitle: s.artist,
+          );
+        })
+        .whereType<PlaybackQueueItem>()
+        .toList();
+
+    final startIndex = queue.indexWhere((item) => item.videoId == selectedVideoId);
+    if (queue.isEmpty || startIndex == -1) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to build a valid playback queue.')),
+        );
+      }
+      return;
+    }
+
+    try {
+      final playback = context.read<PlaybackService>();
+      await playback.setQueueAndPlay(
+        queue: queue,
+        startIndex: startIndex,
+        autoAdvance: _isPlayAllActive,
+      );
+      playback.showVideo();
+      _syncCurrentFromPlayback();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _embedLoadError = true);
+      await _openCurrentInYouTube();
+      _syncCurrentFromPlayback();
+    }
   }
 
-  void _playEpisode(Episode episode) {
+  Future<void> _playEpisode(Episode episode) async {
+    final selectedVideoId = _videoIdForEpisode(episode);
+    if (selectedVideoId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This episode has an invalid YouTube URL.')),
+        );
+      }
+      return;
+    }
+
     setState(() {
       _currentEpisode = episode;
       _currentSong = null;
+      _embedLoadError = false;
     });
-    if (episode.youtubeId.isNotEmpty && episode.youtubeId != "mock_video_id") {
-      _controller.loadVideoById(videoId: episode.youtubeId);
-    } else {
-      _controller.loadVideoById(videoId: 'dQw4w9WgXcQ');
+
+    final episodes = context.read<NostalgiaProvider>().episodes;
+    final queue = episodes
+        .map((e) {
+          final id = _videoIdForEpisode(e);
+          if (id == null) return null;
+          return PlaybackQueueItem(
+            videoId: id,
+            title: e.showTitle,
+            subtitle: e.episodeTitle,
+          );
+        })
+        .whereType<PlaybackQueueItem>()
+        .toList();
+
+    final startIndex = queue.indexWhere((item) => item.videoId == selectedVideoId);
+    if (queue.isEmpty || startIndex == -1) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to build a valid playback queue.')),
+        );
+      }
+      return;
     }
-    _controller.playVideo();
+
+    try {
+      final playback = context.read<PlaybackService>();
+      await playback.setQueueAndPlay(
+        queue: queue,
+        startIndex: startIndex,
+        autoAdvance: false,
+      );
+      playback.showVideo();
+      _syncCurrentFromPlayback();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _embedLoadError = true);
+      await _openCurrentInYouTube();
+      _syncCurrentFromPlayback();
+    }
+  }
+
+  Future<void> _playSpecificEpisode(Episode episode) async {
+    final playback = context.read<PlaybackService>();
+    final sameEpisode = _currentEpisode?.id == episode.id &&
+        playback.currentVideoId == _videoIdForEpisode(episode);
+
+    if (sameEpisode) {
+      if (playback.isPlaying) {
+        await playback.pause();
+      } else {
+        await playback.resume();
+      }
+      return;
+    }
+
+    await _playEpisode(episode);
   }
 
   List<Song> _buildPlayQueue(List<Song> songs) {
@@ -137,36 +290,83 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
     });
   }
 
-  void _playNext() {
-    if (_currentIndex + 1 < _playQueue.length) {
-      setState(() => _currentIndex++);
-      _playSong(_playQueue[_currentIndex]);
-    } else {
-      _stopPlayAll();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Playlist complete")),
-      );
-    }
-  }
+  Future<void> _playSpecificSong(Song song) async {
+    final playback = context.read<PlaybackService>();
+    final sameSong = _currentSong?.id == song.id &&
+        playback.currentVideoId == _videoIdForSong(song);
 
-  void _playPrevious() {
-    if (_currentIndex > 0) {
-      setState(() => _currentIndex--);
-      _playSong(_playQueue[_currentIndex]);
+    if (sameSong) {
+      if (playback.isPlaying) {
+        await playback.pause();
+      } else {
+        await playback.resume();
+      }
+      return;
     }
-  }
 
-  void _playSpecificSong(Song song) {
     if (_isPlayAllActive) {
       final index = _playQueue.indexWhere((s) => s.id == song.id);
       if (index != -1) {
         setState(() => _currentIndex = index);
-        _playSong(_playQueue[_currentIndex]);
+        await _playSong(_playQueue[_currentIndex]);
       } else {
-        _playSong(song);
+        await _playSong(song);
       }
     } else {
-      _playSong(song);
+      await _playSong(song);
+    }
+  }
+
+  void _syncCurrentFromPlayback() {
+    if (!mounted) return;
+    final playback = context.read<PlaybackService>();
+    final provider = context.read<NostalgiaProvider>();
+    final currentVideoId = playback.currentVideoId;
+    if (currentVideoId == null || currentVideoId.isEmpty) return;
+
+    Song? matchedSong;
+    for (final song in provider.songs) {
+      if (_videoIdForSong(song) == currentVideoId) {
+        matchedSong = song;
+        break;
+      }
+    }
+
+    if (matchedSong != null) {
+      final matched = matchedSong;
+      final playQueueIndex = _playQueue.indexWhere((s) => s.id == matched.id);
+      final sameSong = _currentSong?.id == matched.id;
+      final sameEpisodeCleared = _currentEpisode == null;
+      final sameIndex = playQueueIndex == -1 || _currentIndex == playQueueIndex;
+      if (!sameSong || !sameEpisodeCleared || !sameIndex) {
+        setState(() {
+          _currentSong = matched;
+          _currentEpisode = null;
+          if (playQueueIndex != -1) {
+            _currentIndex = playQueueIndex;
+          }
+        });
+      }
+      return;
+    }
+
+    Episode? matchedEpisode;
+    for (final episode in provider.episodes) {
+      if (_videoIdForEpisode(episode) == currentVideoId) {
+        matchedEpisode = episode;
+        break;
+      }
+    }
+
+    if (matchedEpisode != null) {
+      final sameEpisode = _currentEpisode?.id == matchedEpisode.id;
+      final sameSongCleared = _currentSong == null;
+      if (!sameEpisode || !sameSongCleared) {
+        setState(() {
+          _currentEpisode = matchedEpisode;
+          _currentSong = null;
+        });
+      }
     }
   }
 
@@ -181,6 +381,10 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
     if (group == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _syncCurrentFromPlayback();
+    });
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -204,6 +408,8 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
           ],
         ),
         actions: [
+          const ThemeToggle(),
+          const SizedBox(width: 8),
           IconButton(
             icon: Container(
               padding: const EdgeInsets.all(8),
@@ -285,6 +491,17 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
   Widget _buildPlayerCard(List<Song> songs) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final playback = context.watch<PlaybackService>();
+    final nowSong = _currentSong;
+    final nowEpisode = _currentEpisode;
+    final nowVideoId = nowSong != null
+        ? _videoIdForSong(nowSong)
+        : (nowEpisode != null ? _videoIdForEpisode(nowEpisode) : null);
+    final thumbnailUrl = nowVideoId != null
+        ? 'https://img.youtube.com/vi/$nowVideoId/hqdefault.jpg'
+        : null;
+    final canOpenInYouTube = _currentSong != null || _currentEpisode != null;
+
     return Container(
       decoration: BoxDecoration(
         color: isDark ? AppTheme.darkSecondary : AppTheme.lightSecondary,
@@ -295,13 +512,57 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
       padding: const EdgeInsets.all(AppTheme.spacingMd),
       child: Column(
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+              border: Border.all(color: theme.colorScheme.onSurface, width: 2),
+            ),
+            clipBehavior: Clip.antiAlias,
             child: AspectRatio(
               aspectRatio: 16 / 9,
-              child: YoutubePlayer(controller: _controller),
+              child: nowVideoId == null
+                  ? Container(
+                      color: isDark
+                          ? AppTheme.darkSecondary
+                          : AppTheme.lightSecondary,
+                      child: Icon(
+                        Icons.music_note_rounded,
+                        color: isDark
+                            ? AppTheme.darkOnSecondary
+                            : AppTheme.lightOnPrimary,
+                        size: 48,
+                      ),
+                    )
+                  : Image.network(
+                      thumbnailUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: isDark
+                            ? AppTheme.darkSecondary
+                            : AppTheme.lightSecondary,
+                        child: Icon(
+                          Icons.music_note_rounded,
+                          color: isDark
+                              ? AppTheme.darkOnSecondary
+                              : AppTheme.lightOnPrimary,
+                          size: 48,
+                        ),
+                      ),
+                    ),
             ),
           ),
+          if (_embedLoadError) ...[
+            const SizedBox(height: AppTheme.spacingSm),
+            Text(
+              "Embedded player failed to load in this browser session.",
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: isDark
+                    ? AppTheme.darkSecondaryText
+                    : AppTheme.lightSecondaryText,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
           const SizedBox(height: AppTheme.spacingMd),
           Text(
             _currentSong?.title ??
@@ -323,36 +584,89 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
             ),
             textAlign: TextAlign.center,
           ),
-          if (_isPlayAllActive) ...[
-            const SizedBox(height: AppTheme.spacingMd),
+          if (canOpenInYouTube) ...[
+            const SizedBox(height: AppTheme.spacingSm),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                IconButton(
-                  icon: Icon(Icons.skip_previous,
-                      color: isDark
-                          ? AppTheme.darkOnSecondary
-                          : AppTheme.lightOnPrimary),
-                  onPressed: _currentIndex > 0 ? _playPrevious : null,
+                OutlinedButton.icon(
+                  onPressed: playback.showVideoWindow
+                      ? playback.hideVideo
+                      : playback.showVideo,
+                  icon: Icon(playback.showVideoWindow
+                      ? Icons.visibility_off_rounded
+                      : Icons.ondemand_video_rounded),
+                  label: Text(playback.showVideoWindow
+                      ? "Hide Video"
+                      : "Show Video"),
                 ),
-                IconButton(
-                  icon: Icon(Icons.stop,
-                      color: isDark
-                          ? AppTheme.darkOnSecondary
-                          : AppTheme.lightOnPrimary),
-                  onPressed: _stopPlayAll,
-                ),
-                IconButton(
-                  icon: Icon(Icons.skip_next,
-                      color: isDark
-                          ? AppTheme.darkOnSecondary
-                          : AppTheme.lightOnPrimary),
-                  onPressed:
-                      _currentIndex < _playQueue.length - 1 ? _playNext : null,
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _openCurrentInYouTube,
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: const Text("Open in YouTube"),
                 ),
               ],
             ),
           ],
+          const SizedBox(height: AppTheme.spacingMd),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                icon: Icon(
+                  Icons.skip_previous_rounded,
+                  color:
+                      isDark ? AppTheme.darkOnSecondary : AppTheme.lightOnPrimary,
+                ),
+                onPressed:
+                    playback.canGoPrevious ? () => playback.previous() : null,
+              ),
+              IconButton(
+                icon: Icon(
+                  playback.isPlaying
+                      ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded,
+                  color:
+                      isDark ? AppTheme.darkOnSecondary : AppTheme.lightOnPrimary,
+                ),
+                onPressed: () {
+                  if (playback.isPlaying) {
+                    playback.pause();
+                  } else {
+                    playback.resume();
+                  }
+                },
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.skip_next_rounded,
+                  color:
+                      isDark ? AppTheme.darkOnSecondary : AppTheme.lightOnPrimary,
+                ),
+                onPressed: playback.canGoNext ? () => playback.next() : null,
+              ),
+              if (_isPlayAllActive)
+                IconButton(
+                  icon: Icon(
+                    Icons.stop_rounded,
+                    color: isDark
+                        ? AppTheme.darkOnSecondary
+                        : AppTheme.lightOnPrimary,
+                  ),
+                  onPressed: _stopPlayAll,
+                ),
+            ],
+          ),
+          if (playback.queueLabel != null)
+            Text(
+              playback.queueLabel!,
+              style: theme.textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                color:
+                    isDark ? AppTheme.darkOnSecondary : AppTheme.lightOnPrimary,
+              ),
+            ),
         ],
       ),
     );
@@ -529,20 +843,15 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
   List<Widget> _buildSongsView(List<Song> songs) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final playback = context.watch<PlaybackService>();
     final provider = context.watch<NostalgiaProvider>();
     final group = provider.currentGroup;
     final songCap = group?.songCapPerUser ?? 7;
     return [
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text("Group Contributions",
-              style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: isDark
-                      ? AppTheme.darkPrimaryText
-                      : AppTheme.lightPrimaryText)),
-          Wrap(
+      LayoutBuilder(
+        builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 640;
+          final controls = Wrap(
             spacing: 8,
             runSpacing: 8,
             alignment: WrapAlignment.end,
@@ -669,8 +978,34 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
                         fontSize: 12)),
               ),
             ],
-          ),
-        ],
+          );
+
+          final title = Text("Group Contributions",
+              style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: isDark
+                      ? AppTheme.darkPrimaryText
+                      : AppTheme.lightPrimaryText));
+
+          if (isNarrow) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                title,
+                const SizedBox(height: 8),
+                controls,
+              ],
+            );
+          }
+
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              title,
+              controls,
+            ],
+          );
+        },
       ),
       const SizedBox(height: AppTheme.spacingMd),
       Expanded(
@@ -678,7 +1013,7 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
           itemCount: songs.length,
           itemBuilder: (context, index) {
             final song = songs[index];
-            final isCurrent = _currentSong?.id == song.id;
+            final isCurrent = _currentSong?.id == song.id && playback.isPlaying;
             return _SongItemWithReactions(
               song: song,
               isPlaying: isCurrent,
@@ -694,6 +1029,7 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
   List<Widget> _buildTVView(List<Episode> episodes) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final playback = context.watch<PlaybackService>();
     final provider = context.watch<NostalgiaProvider>();
     final group = provider.currentGroup;
     final episodeCap = group?.episodeCapPerUser ?? 1;
@@ -738,11 +1074,12 @@ class _GroupPlaylistScreenState extends State<GroupPlaylistScreen> {
                 itemCount: episodes.length,
                 itemBuilder: (context, index) {
                   final episode = episodes[index];
-                  final isCurrent = _currentEpisode?.id == episode.id;
+                  final isCurrent =
+                      _currentEpisode?.id == episode.id && playback.isPlaying;
                   return _EpisodeItem(
                     episode: episode,
                     isPlaying: isCurrent,
-                    onPlay: () => _playEpisode(episode),
+                    onPlay: () => _playSpecificEpisode(episode),
                     onDelete: () => _confirmDeleteEpisode(episode),
                   );
                 },

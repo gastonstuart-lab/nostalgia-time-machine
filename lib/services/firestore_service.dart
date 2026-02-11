@@ -14,16 +14,150 @@ import 'package:nostalgia_time_machine/models/quiz_score.dart';
 import 'package:nostalgia_time_machine/models/movie.dart';
 import 'package:nostalgia_time_machine/models/decade_score.dart';
 import 'package:nostalgia_time_machine/models/decade_winner.dart';
+import 'package:nostalgia_time_machine/models/year_news.dart';
+import 'package:nostalgia_time_machine/models/year_news_story.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseFunctions _functions =
       FirebaseFunctions.instanceFor(region: 'us-central1');
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final Map<int, YearNewsPackage?> _yearNewsCache = {};
+  final Map<int, Stream<YearNewsPackage?>> _yearNewsStreamCache = {};
+  final Set<int> _generationRequestedYears = <int>{};
+  final Map<String, YearNewsStory> _yearNewsStoryCache = {};
 
   // ============================================================================
   // USER PROFILES
   // ============================================================================
+
+  Future<YearNewsPackage?> getYearNewsPackage(int year) async {
+    if (_yearNewsCache.containsKey(year)) {
+      return _yearNewsCache[year];
+    }
+
+    try {
+      final doc = await _db.collection('year_news').doc('$year').get();
+      if (!doc.exists || doc.data() == null) {
+        _yearNewsCache[year] = null;
+        return null;
+      }
+
+      final package = YearNewsPackage.fromJson(doc.data()!);
+      final normalized = package.year == 0
+          ? YearNewsPackage(
+              year: year,
+              hero: package.hero,
+              byMonth: package.byMonth,
+              ticker: package.ticker,
+            )
+          : package;
+      _yearNewsCache[year] = normalized;
+      return normalized;
+    } catch (e) {
+      debugPrint('❌ Failed to get year news package for $year: $e');
+      return _yearNewsCache[year];
+    }
+  }
+
+  Stream<YearNewsPackage?> streamYearNewsPackage(int year) {
+    final existing = _yearNewsStreamCache[year];
+    if (existing != null) {
+      return existing;
+    }
+
+    final stream =
+        _db.collection('year_news').doc('$year').snapshots().map((doc) {
+      if (!doc.exists || doc.data() == null) {
+        _yearNewsCache[year] = null;
+        return null;
+      }
+
+      try {
+        final package = YearNewsPackage.fromJson(doc.data()!);
+        final normalized = package.year == 0
+            ? YearNewsPackage(
+                year: year,
+                hero: package.hero,
+                byMonth: package.byMonth,
+                ticker: package.ticker,
+              )
+            : package;
+        _yearNewsCache[year] = normalized;
+        return normalized;
+      } catch (e) {
+        debugPrint('❌ Failed to parse year news package for $year: $e');
+        return _yearNewsCache[year];
+      }
+    }).asBroadcastStream();
+
+    _yearNewsStreamCache[year] = stream;
+    return stream;
+  }
+
+  Future<void> ensureYearNewsGenerated(int year) async {
+    if (_generationRequestedYears.contains(year)) {
+      return;
+    }
+
+    _generationRequestedYears.add(year);
+    try {
+      final existing = await getYearNewsPackage(year);
+      if (existing != null) {
+        return;
+      }
+
+      final callable = _functions.httpsCallable(
+        'generateYearNewsPackage',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 300)),
+      );
+      await callable.call({'year': year});
+      debugPrint('✅ Year news generation requested for $year');
+    } catch (e) {
+      _generationRequestedYears.remove(year);
+      debugPrint('❌ Failed to ensure year news generated for $year: $e');
+    }
+  }
+
+  Future<YearNewsStory> getOrGenerateYearNewsStory({
+    required int year,
+    required YearNewsItem item,
+  }) async {
+    final cacheKey = _yearNewsStoryCacheKey(year: year, item: item);
+    final cached = _yearNewsStoryCache[cacheKey];
+    if (cached != null) {
+      return cached;
+    }
+
+    final callable = _functions.httpsCallable(
+      'generateYearNewsArticle',
+      options: HttpsCallableOptions(timeout: const Duration(seconds: 120)),
+    );
+    final result = await callable.call({
+      'year': year,
+      'month': item.month,
+      'title': item.title,
+      'subtitle': item.subtitle,
+      'imageQuery': item.imageQuery,
+    });
+
+    final payload = result.data as Map<dynamic, dynamic>? ?? const {};
+    final articleRaw = payload['article'] as Map<dynamic, dynamic>? ?? const {};
+    final article =
+        YearNewsStory.fromJson(Map<String, dynamic>.from(articleRaw));
+    _yearNewsStoryCache[cacheKey] = article;
+    return article;
+  }
+
+  String _yearNewsStoryCacheKey({
+    required int year,
+    required YearNewsItem item,
+  }) {
+    final raw = '${item.month}-${item.title}'.toLowerCase();
+    final normalized =
+        raw.replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-|-$'), '');
+    return '$year-$normalized';
+  }
 
   Future<void> createUserProfile(UserProfile profile) async {
     try {
@@ -91,11 +225,14 @@ class FirestoreService {
         },
       );
       final batch = _db.batch();
-      batch.set(groupRef, {
-        ...group.toJson(),
-        'createdAt': FieldValue.serverTimestamp(),
-        'currentWeekStart': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      batch.set(
+          groupRef,
+          {
+            ...group.toJson(),
+            'createdAt': FieldValue.serverTimestamp(),
+            'currentWeekStart': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true));
       batch.set(groupRef.collection('weeks').doc(weekId), {
         'year': startDecade,
         'weekStart': FieldValue.serverTimestamp(),
@@ -526,6 +663,10 @@ class FirestoreService {
     required String title,
     int? year,
     String? posterUrl,
+    String? overview,
+    String? genre,
+    String? trailerYoutubeId,
+    String? trailerYoutubeUrl,
   }) async {
     try {
       final uid = _auth.currentUser?.uid;
@@ -564,6 +705,10 @@ class FirestoreService {
           title: title,
           year: year,
           posterUrl: posterUrl,
+          overview: overview,
+          genre: genre,
+          trailerYoutubeId: trailerYoutubeId,
+          trailerYoutubeUrl: trailerYoutubeUrl,
           addedByUid: uid,
           addedByName: addedByName,
           addedAt: DateTime.now(),
@@ -735,7 +880,8 @@ class FirestoreService {
 
       final groupData = groupDoc.data()!;
       final currentYear = (groupData['currentYear'] as num?)?.toInt() ?? 1990;
-      final startYear = (groupData['startYear'] as num?)?.toInt() ?? currentYear;
+      final startYear =
+          (groupData['startYear'] as num?)?.toInt() ?? currentYear;
       final currentWeekIndex = ((groupData['weekIndex'] as num?)?.toInt() ??
               (currentYear - startYear + 1))
           .clamp(1, 9999);
@@ -1180,12 +1326,17 @@ class FirestoreService {
               .map((q) => Map<String, dynamic>.from(q))
               .where((q) {
                 final qYear = (q['year'] as num?)?.toInt();
-                final options = ((q['choices'] as List?) ?? (q['options'] as List?))
-                    ?.map((o) => '$o')
-                    .toList();
-                if (qYear != year || options == null || options.length != 4) return false;
+                final options =
+                    ((q['choices'] as List?) ?? (q['options'] as List?))
+                        ?.map((o) => '$o')
+                        .toList();
+                if (qYear != year || options == null || options.length != 4) {
+                  return false;
+                }
                 final prefixes = options
-                    .map((o) => RegExp(r'^(.+)\s+[A-D]$').firstMatch(o.trim())?.group(1))
+                    .map((o) => RegExp(r'^(.+)\s+[A-D]$')
+                        .firstMatch(o.trim())
+                        ?.group(1))
                     .whereType<String>()
                     .map((s) => s.toLowerCase())
                     .toList();

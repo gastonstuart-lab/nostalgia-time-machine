@@ -192,7 +192,7 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _ticker = Timer.periodic(const Duration(milliseconds: 450), (_) {
+    _ticker = Timer.periodic(const Duration(milliseconds: 700), (_) {
       if (!mounted) return;
       setState(() => _index = (_index + 1) % _items.length);
     });

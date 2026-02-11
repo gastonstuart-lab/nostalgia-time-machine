@@ -1,18 +1,48 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../theme.dart';
 import '../state.dart';
 import '../services/firestore_service.dart';
+import '../services/year_timeline_service.dart';
 import '../models/episode.dart';
 import '../models/group_message.dart';
 import '../models/quiz_score.dart';
 import '../models/movie.dart';
 import '../models/decade_score.dart';
 import '../models/decade_winner.dart';
+import '../models/year_news.dart';
+import '../models/year_timeline_event.dart';
+import '../components/year_news_section.dart';
 import '../components/theme_toggle.dart';
+import '../components/movie_trailer_sheet.dart';
+
+BoxDecoration _featureCardDecoration(
+  BuildContext context, {
+  required Color tint,
+}) {
+  final theme = Theme.of(context);
+  final isDark = theme.brightness == Brightness.dark;
+  final base = isDark ? AppTheme.lightSurface : theme.scaffoldBackgroundColor;
+  final overlay = tint.withValues(alpha: isDark ? 0.20 : 0.12);
+  final blend = Color.alphaBlend(overlay, base);
+
+  return BoxDecoration(
+    color: blend,
+    borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+    border: Border.all(
+      color: isDark ? AppTheme.lightOnSurface : theme.colorScheme.onSurface,
+      width: 3,
+    ),
+    boxShadow: AppTheme.shadowMd,
+  );
+}
 
 class WeeklyDashboardScreen extends StatefulWidget {
   const WeeklyDashboardScreen({super.key});
@@ -69,7 +99,7 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
     final text = _chatController.text.trim();
     if (text.isEmpty || _isSendingMessage) return;
 
-    setState(() => _isSendingMessage = true);
+    _isSendingMessage = true;
 
     try {
       final provider = context.read<NostalgiaProvider>();
@@ -97,9 +127,7 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _isSendingMessage = false);
-      }
+      _isSendingMessage = false;
     }
   }
 
@@ -167,11 +195,28 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
     final songCap = group.songCapPerUser;
     final int? currentYear = group.currentYear > 0 ? group.currentYear : null;
     final int? weekNumber = group.weekIndex > 0 ? group.weekIndex : null;
+    final yearNewsStream =
+        _firestoreService.streamYearNewsPackage(group.currentYear);
 
     return Scaffold(
+      bottomNavigationBar: StreamBuilder<YearNewsPackage?>(
+        stream: yearNewsStream,
+        builder: (context, snapshot) {
+          final package = snapshot.data;
+          if (package == null || package.ticker.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          return YearNewsTicker(headlines: package.ticker);
+        },
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppTheme.spacingLg),
+          padding: const EdgeInsets.fromLTRB(
+            AppTheme.spacingLg,
+            AppTheme.spacingLg,
+            AppTheme.spacingLg,
+            96,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -516,6 +561,30 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
 
               const SizedBox(height: AppTheme.spacingMd),
 
+              StreamBuilder<YearNewsPackage?>(
+                stream: yearNewsStream,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const YearNewsSectionSkeleton();
+                  }
+
+                  final package = snapshot.data;
+                  if (package == null) {
+                    Future.microtask(() {
+                      _firestoreService
+                          .ensureYearNewsGenerated(group.currentYear);
+                    });
+                    return _YearNewsNotReadyCard(
+                      year: group.currentYear,
+                      isGenerating: true,
+                    );
+                  }
+
+                  return YearNewsSection(package: package);
+                },
+              ),
+              const SizedBox(height: AppTheme.spacingMd),
+
               _WeeklyQuizCard(
                 groupId: group.id,
                 weekId: weekId,
@@ -534,58 +603,8 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
               ),
               const SizedBox(height: AppTheme.spacingMd),
 
-              // This Week's Episode Card
-              Container(
-                padding: const EdgeInsets.all(AppTheme.spacingLg),
-                decoration: BoxDecoration(
-                  color: AppTheme.lightBackground,
-                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                  border: Border.all(color: AppTheme.lightOnSurface, width: 3),
-                  boxShadow: AppTheme.shadowMd,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "This Week's Episode",
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            color: AppTheme.lightPrimaryText,
-                          ),
-                    ),
-                    const SizedBox(height: AppTheme.spacingMd),
-                    if (episodes.isEmpty)
-                      Column(
-                        children: [
-                          Text(
-                            "No episode added yet",
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: AppTheme.lightSecondaryText,
-                                ),
-                          ),
-                          const SizedBox(height: AppTheme.spacingSm),
-                          OutlinedButton.icon(
-                            onPressed: () => context.push('/add-tv'),
-                            icon: const Icon(Icons.tv_rounded),
-                            label: const Text("Add Episode"),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(
-                                  color: AppTheme.lightPrimary),
-                              foregroundColor: AppTheme.lightPrimary,
-                            ),
-                          ),
-                        ],
-                      )
-                    else
-                      _ThisWeekEpisodeCard(
-                        episode: episodes.first,
-                        onOpen: () => context.push('/playlist'),
-                      ),
-                  ],
-                ),
+              _WeeklyTvCard(
+                episodes: episodes,
               ),
 
               const SizedBox(height: AppTheme.spacingMd),
@@ -740,6 +759,741 @@ class _WeeklyDashboardScreenState extends State<WeeklyDashboardScreen> {
   }
 }
 
+class _YearNewsNotReadyCard extends StatelessWidget {
+  final int year;
+  final bool isGenerating;
+
+  const _YearNewsNotReadyCard({
+    required this.year,
+    this.isGenerating = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(AppTheme.spacingLg),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        border: Border.all(color: theme.colorScheme.onSurface, width: 3),
+        boxShadow: AppTheme.shadowSm,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.newspaper_rounded,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: AppTheme.spacingSm),
+              Text(
+                'Year News $year',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppTheme.spacingSm),
+          Text(
+            isGenerating
+                ? 'Generating year news now. This usually takes a few seconds.'
+                : 'News is loading or has not been generated for this year yet.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _YearTimelineCard extends StatefulWidget {
+  final int year;
+
+  const _YearTimelineCard({required this.year});
+
+  @override
+  State<_YearTimelineCard> createState() => _YearTimelineCardState();
+}
+
+class _YearTimelineCardState extends State<_YearTimelineCard> {
+  final YearTimelineService _service = YearTimelineService();
+  final PageController _pageController = PageController(viewportFraction: 0.95);
+  final ScrollController _tickerController = ScrollController();
+  Timer? _tickerTimer;
+  int _currentMonthIndex = 0;
+
+  static const List<String> _months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _tickerTimer = Timer.periodic(const Duration(milliseconds: 26), (_) {
+      if (!_tickerController.hasClients) return;
+      final pos = _tickerController.position;
+      if (pos.maxScrollExtent <= 0) return;
+      final next = pos.pixels + 0.7;
+      if (next >= pos.maxScrollExtent) {
+        _tickerController.jumpTo(0);
+      } else {
+        _tickerController.jumpTo(next);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _tickerTimer?.cancel();
+    _tickerController.dispose();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openStory(BuildContext context, YearTimelineEvent event) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _TimelineStorySheet(event: event),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primaryText =
+        isDark ? AppTheme.darkPrimaryText : AppTheme.lightPrimaryText;
+    final secondaryText =
+        isDark ? AppTheme.darkSecondaryText : AppTheme.lightSecondaryText;
+    final isWide = MediaQuery.of(context).size.width >= 900;
+
+    return Container(
+      padding: const EdgeInsets.all(AppTheme.spacingLg),
+      decoration:
+          _featureCardDecoration(context, tint: theme.colorScheme.tertiary),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.tertiary,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  border:
+                      Border.all(color: theme.colorScheme.onSurface, width: 2),
+                ),
+                child: Icon(
+                  Icons.newspaper_rounded,
+                  color: theme.colorScheme.onSecondary,
+                ),
+              ),
+              const SizedBox(width: AppTheme.spacingSm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Year Timeline ${widget.year}',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        color: primaryText,
+                      ),
+                    ),
+                    Text(
+                      'January to December highlights',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: secondaryText,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppTheme.spacingSm),
+          SizedBox(
+            height: 40,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _months.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final selected = index == _currentMonthIndex;
+                return ChoiceChip(
+                  label: Text(_months[index]),
+                  selected: selected,
+                  onSelected: (_) {
+                    setState(() => _currentMonthIndex = index);
+                    _pageController.animateToPage(
+                      index,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic,
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: AppTheme.spacingSm),
+          FutureBuilder<List<YearTimelineMonth>>(
+            future: _service.loadYear(widget.year),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 30),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              final months = snapshot.data ?? const <YearTimelineMonth>[];
+              if (months.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    'Timeline is loading slowly right now. Try again in a moment.',
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(color: secondaryText),
+                  ),
+                );
+              }
+
+              final allHeadlines = months
+                  .expand((m) => m.events)
+                  .map((e) => e.title)
+                  .where((t) => t.trim().isNotEmpty)
+                  .take(48)
+                  .toList();
+              final tickerItems = allHeadlines.isEmpty
+                  ? <String>[]
+                  : [...allHeadlines, ...allHeadlines, ...allHeadlines];
+
+              return Column(
+                children: [
+                  if (tickerItems.isNotEmpty)
+                    Container(
+                      height: 36,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color:
+                            theme.colorScheme.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                        border: Border.all(
+                          color:
+                              theme.colorScheme.primary.withValues(alpha: 0.4),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.flash_on_rounded,
+                              size: 16, color: theme.colorScheme.primary),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ListView.separated(
+                              controller: _tickerController,
+                              scrollDirection: Axis.horizontal,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: tickerItems.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(width: 16),
+                              itemBuilder: (context, i) => Center(
+                                child: Text(
+                                  tickerItems[i],
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: primaryText,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  SizedBox(
+                    height: isWide ? 430 : 360,
+                    child: PageView.builder(
+                      controller: _pageController,
+                      itemCount: months.length,
+                      onPageChanged: (index) {
+                        if (_currentMonthIndex != index) {
+                          setState(() => _currentMonthIndex = index);
+                        }
+                      },
+                      itemBuilder: (context, index) {
+                        final monthData = months[index];
+                        final events = monthData.events;
+                        final heroEvent =
+                            events.isNotEmpty ? events.first : null;
+
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Container(
+                            padding: const EdgeInsets.all(AppTheme.spacingMd),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  theme.colorScheme.surface
+                                      .withValues(alpha: 0.85),
+                                  theme.colorScheme.surface
+                                      .withValues(alpha: 0.55),
+                                ],
+                              ),
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.radiusLg),
+                              border: Border.all(
+                                  color: theme.colorScheme.onSurface, width: 2),
+                            ),
+                            child: events.isEmpty
+                                ? Center(
+                                    child: Text(
+                                      'No timeline stories found for ${_months[index]} ${widget.year}.',
+                                      textAlign: TextAlign.center,
+                                      style: theme.textTheme.bodyMedium
+                                          ?.copyWith(color: secondaryText),
+                                    ),
+                                  )
+                                : Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      if (heroEvent != null)
+                                        Container(
+                                          height: isWide ? 130 : 110,
+                                          margin:
+                                              const EdgeInsets.only(bottom: 10),
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(
+                                                AppTheme.radiusLg),
+                                            border: Border.all(
+                                              color: theme.colorScheme.onSurface
+                                                  .withValues(alpha: 0.35),
+                                              width: 1.5,
+                                            ),
+                                          ),
+                                          clipBehavior: Clip.antiAlias,
+                                          child: Stack(
+                                            fit: StackFit.expand,
+                                            children: [
+                                              if (heroEvent.imageUrl != null)
+                                                Image.network(
+                                                  heroEvent.imageUrl!,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (_, __, ___) =>
+                                                      ColoredBox(
+                                                    color: theme
+                                                        .colorScheme.tertiary
+                                                        .withValues(alpha: 0.2),
+                                                    child: const SizedBox(),
+                                                  ),
+                                                )
+                                              else
+                                                ColoredBox(
+                                                  color: theme
+                                                      .colorScheme.tertiary
+                                                      .withValues(alpha: 0.2),
+                                                ),
+                                              DecoratedBox(
+                                                decoration: BoxDecoration(
+                                                  gradient: LinearGradient(
+                                                    begin: Alignment.topCenter,
+                                                    end: Alignment.bottomCenter,
+                                                    colors: [
+                                                      Colors.black.withValues(
+                                                          alpha: 0.05),
+                                                      Colors.black.withValues(
+                                                          alpha: 0.55),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                              Positioned(
+                                                left: 10,
+                                                right: 10,
+                                                bottom: 10,
+                                                child: Text(
+                                                  heroEvent.title,
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: theme
+                                                      .textTheme.bodyLarge
+                                                      ?.copyWith(
+                                                    fontWeight: FontWeight.w900,
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      Text(
+                                        '${events.length} stories in ${_months[index]}',
+                                        style: theme.textTheme.labelMedium
+                                            ?.copyWith(
+                                          fontWeight: FontWeight.w800,
+                                          color: theme.colorScheme.primary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Expanded(
+                                        child: ListView.separated(
+                                          itemCount: events.length,
+                                          separatorBuilder: (_, __) =>
+                                              const SizedBox(height: 10),
+                                          itemBuilder: (context, eventIndex) {
+                                            final event = events[eventIndex];
+                                            return InkWell(
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                      AppTheme.radiusMd),
+                                              onTap: () =>
+                                                  _openStory(context, event),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.all(10),
+                                                decoration: BoxDecoration(
+                                                  color:
+                                                      theme.colorScheme.surface,
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          AppTheme.radiusMd),
+                                                  border: Border.all(
+                                                    color: theme
+                                                        .colorScheme.onSurface
+                                                        .withValues(alpha: 0.3),
+                                                    width: 1.5,
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    Container(
+                                                      width: 44,
+                                                      height: 64,
+                                                      decoration: BoxDecoration(
+                                                        color: theme
+                                                            .colorScheme.primary
+                                                            .withValues(
+                                                                alpha: 0.12),
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(10),
+                                                        border: Border.all(
+                                                          color: theme
+                                                              .colorScheme
+                                                              .primary
+                                                              .withValues(
+                                                                  alpha: 0.35),
+                                                          width: 1.2,
+                                                        ),
+                                                      ),
+                                                      child: Column(
+                                                        mainAxisAlignment:
+                                                            MainAxisAlignment
+                                                                .center,
+                                                        children: [
+                                                          Text(
+                                                            '${event.day}',
+                                                            style: theme
+                                                                .textTheme
+                                                                .titleMedium
+                                                                ?.copyWith(
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w900,
+                                                              color: theme
+                                                                  .colorScheme
+                                                                  .primary,
+                                                            ),
+                                                          ),
+                                                          Text(
+                                                            _months[index],
+                                                            style: theme
+                                                                .textTheme
+                                                                .labelSmall
+                                                                ?.copyWith(
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w700,
+                                                              color:
+                                                                  secondaryText,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 10),
+                                                    Container(
+                                                      width: 70,
+                                                      height: 70,
+                                                      decoration: BoxDecoration(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(10),
+                                                        color: theme.colorScheme
+                                                            .secondary
+                                                            .withValues(
+                                                                alpha: 0.15),
+                                                      ),
+                                                      clipBehavior:
+                                                          Clip.antiAlias,
+                                                      child: event.imageUrl !=
+                                                              null
+                                                          ? Image.network(
+                                                              event.imageUrl!,
+                                                              fit: BoxFit.cover,
+                                                              errorBuilder: (_,
+                                                                      __,
+                                                                      ___) =>
+                                                                  Icon(
+                                                                Icons
+                                                                    .auto_stories_rounded,
+                                                                color: theme
+                                                                    .colorScheme
+                                                                    .secondary,
+                                                              ),
+                                                            )
+                                                          : Icon(
+                                                              Icons
+                                                                  .auto_stories_rounded,
+                                                              color: theme
+                                                                  .colorScheme
+                                                                  .secondary,
+                                                            ),
+                                                    ),
+                                                    const SizedBox(width: 10),
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        children: [
+                                                          Text(
+                                                            event.title,
+                                                            maxLines: 3,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                            style: theme
+                                                                .textTheme
+                                                                .bodyMedium
+                                                                ?.copyWith(
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w700,
+                                                              color:
+                                                                  primaryText,
+                                                            ),
+                                                          ),
+                                                          const SizedBox(
+                                                              height: 4),
+                                                          Text(
+                                                            'Tap to read more',
+                                                            style: theme
+                                                                .textTheme
+                                                                .labelSmall
+                                                                ?.copyWith(
+                                                              color:
+                                                                  secondaryText,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    Icon(
+                                                      Icons
+                                                          .chevron_right_rounded,
+                                                      color: theme.colorScheme
+                                                          .onSurface,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            )
+                                                .animate(
+                                                    delay: (eventIndex * 45).ms)
+                                                .fadeIn(
+                                                  duration: 320.ms,
+                                                  curve: Curves.easeOutCubic,
+                                                )
+                                                .slideY(
+                                                  begin: 0.08,
+                                                  end: 0,
+                                                  duration: 320.ms,
+                                                  curve: Curves.easeOutCubic,
+                                                );
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TimelineStorySheet extends StatelessWidget {
+  final YearTimelineEvent event;
+
+  const _TimelineStorySheet({required this.event});
+
+  Future<void> _openSource() async {
+    final url = event.articleUrl;
+    if (url == null || url.isEmpty) return;
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primaryText =
+        isDark ? AppTheme.darkPrimaryText : AppTheme.lightPrimaryText;
+    final secondaryText =
+        isDark ? AppTheme.darkSecondaryText : AppTheme.lightSecondaryText;
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.82,
+        decoration: BoxDecoration(
+          color: theme.scaffoldBackgroundColor,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(AppTheme.radiusXl),
+          ),
+          border: Border.all(color: theme.colorScheme.onSurface, width: 2),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              alignment: Alignment.center,
+              child: Container(
+                width: 56,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(AppTheme.spacingLg),
+                children: [
+                  if (event.imageUrl != null)
+                    Container(
+                      height: 200,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                        border: Border.all(
+                            color: theme.colorScheme.onSurface, width: 2),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Image.network(
+                        event.imageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => ColoredBox(
+                          color: theme.colorScheme.secondary
+                              .withValues(alpha: 0.12),
+                          child: Icon(
+                            Icons.image_not_supported_rounded,
+                            color: theme.colorScheme.secondary,
+                            size: 40,
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (event.imageUrl != null) const SizedBox(height: 12),
+                  Text(
+                    '${event.day}/${event.month}/${event.year}',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    event.title,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      color: primaryText,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    event.summary,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      height: 1.35,
+                      color: primaryText,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    event.sourceLabel,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: secondaryText,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (event.articleUrl != null)
+                    ElevatedButton.icon(
+                      onPressed: _openSource,
+                      icon: const Icon(Icons.open_in_new_rounded),
+                      label: const Text('Read Source'),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _WeeklyQuizCard extends StatelessWidget {
   final String groupId;
   final String weekId;
@@ -753,16 +1507,15 @@ class _WeeklyQuizCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryText = AppTheme.lightPrimaryText;
+    final secondaryText = AppTheme.lightSecondaryText;
     final firestoreService = FirestoreService();
 
     return Container(
       padding: const EdgeInsets.all(AppTheme.spacingLg),
-      decoration: BoxDecoration(
-        color: AppTheme.lightBackground,
-        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-        border: Border.all(color: AppTheme.lightOnSurface, width: 3),
-        boxShadow: AppTheme.shadowMd,
-      ),
+      decoration:
+          _featureCardDecoration(context, tint: theme.colorScheme.secondary),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -782,7 +1535,7 @@ class _WeeklyQuizCard extends StatelessWidget {
                         style:
                             Theme.of(context).textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.w800,
-                                  color: AppTheme.lightPrimaryText,
+                                  color: primaryText,
                                 ),
                       ),
                       if (hasTakenQuiz)
@@ -790,7 +1543,7 @@ class _WeeklyQuizCard extends StatelessWidget {
                           "You scored ${snapshot.data!.score}/20",
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: AppTheme.lightSecondaryText,
+                                    color: secondaryText,
                                   ),
                         ),
                     ],
@@ -798,8 +1551,8 @@ class _WeeklyQuizCard extends StatelessWidget {
                   ElevatedButton(
                     onPressed: () => context.push('/weekly-quiz'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.lightSecondary,
-                      foregroundColor: AppTheme.lightOnPrimary,
+                      backgroundColor: theme.colorScheme.secondary,
+                      foregroundColor: theme.colorScheme.onSecondary,
                     ),
                     child:
                         Text(hasTakenQuiz ? 'View Leaderboard' : 'Take Quiz'),
@@ -821,7 +1574,7 @@ class _WeeklyQuizCard extends StatelessWidget {
                 return Text(
                   "No scores yet this week.",
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppTheme.lightSecondaryText,
+                        color: secondaryText,
                       ),
                 );
               }
@@ -834,15 +1587,18 @@ class _WeeklyQuizCard extends StatelessWidget {
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                     leading: Text('#$rank',
-                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800, color: primaryText)),
                     title: Text(
                       score.displayName,
+                      style: TextStyle(color: primaryText),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     trailing: Text(
                       '${score.score}',
-                      style: const TextStyle(fontWeight: FontWeight.w800),
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800, color: primaryText),
                     ),
                   );
                 }).toList(),
@@ -866,17 +1622,25 @@ class _WeeklyMovieCard extends StatelessWidget {
     required this.userId,
   });
 
+  Future<void> _openTrailer(BuildContext context, Movie movie) async {
+    await showMovieTrailerSheet(
+      context,
+      title: movie.title,
+      trailerYoutubeId: movie.trailerYoutubeId,
+      trailerYoutubeUrl: movie.trailerYoutubeUrl,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryText = AppTheme.lightPrimaryText;
+    final secondaryText = AppTheme.lightSecondaryText;
     final firestoreService = FirestoreService();
     return Container(
       padding: const EdgeInsets.all(AppTheme.spacingLg),
-      decoration: BoxDecoration(
-        color: AppTheme.lightBackground,
-        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-        border: Border.all(color: AppTheme.lightOnSurface, width: 3),
-        boxShadow: AppTheme.shadowMd,
-      ),
+      decoration:
+          _featureCardDecoration(context, tint: theme.colorScheme.primary),
       child: StreamBuilder<List<Movie>>(
         stream: firestoreService.streamMovies(groupId, weekId),
         builder: (context, snapshot) {
@@ -899,7 +1663,7 @@ class _WeeklyMovieCard extends StatelessWidget {
                 "Weekly Movie Pick",
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w800,
-                      color: AppTheme.lightPrimaryText,
+                      color: primaryText,
                     ),
               ),
               const SizedBox(height: AppTheme.spacingSm),
@@ -908,9 +1672,90 @@ class _WeeklyMovieCard extends StatelessWidget {
                     ? "You picked: ${myPick.title}"
                     : "You haven't picked a movie yet",
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppTheme.lightSecondaryText,
+                      color: secondaryText,
                     ),
               ),
+              if (movies.isNotEmpty) ...[
+                const SizedBox(height: AppTheme.spacingMd),
+                Wrap(
+                  spacing: AppTheme.spacingSm,
+                  runSpacing: AppTheme.spacingSm,
+                  alignment: WrapAlignment.center,
+                  children: movies.map((movie) {
+                    final poster = movie.posterUrl ?? '';
+                    return GestureDetector(
+                      onTap: () => _openTrailer(context, movie),
+                      child: Container(
+                        width: 92,
+                        height: 125,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusMd),
+                          border:
+                              Border.all(color: theme.dividerColor, width: 2),
+                        ),
+                        child: Column(
+                          children: [
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: const BorderRadius.only(
+                                  topLeft:
+                                      Radius.circular(AppTheme.radiusMd - 2),
+                                  topRight:
+                                      Radius.circular(AppTheme.radiusMd - 2),
+                                ),
+                                child: poster.isNotEmpty
+                                    ? Image.network(
+                                        poster,
+                                        width: double.infinity,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) =>
+                                            ColoredBox(
+                                          color: theme.colorScheme.secondary,
+                                          child: Center(
+                                            child: Icon(
+                                                Icons.local_movies_rounded,
+                                                color: theme
+                                                    .colorScheme.onSecondary),
+                                          ),
+                                        ),
+                                      )
+                                    : ColoredBox(
+                                        color: theme.colorScheme.secondary,
+                                        child: Center(
+                                          child: Icon(
+                                              Icons.local_movies_rounded,
+                                              color: theme
+                                                  .colorScheme.onSecondary),
+                                        ),
+                                      ),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 4),
+                              child: Text(
+                                movie.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelSmall
+                                    ?.copyWith(
+                                      color: primaryText,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
               const SizedBox(height: AppTheme.spacingMd),
               Row(
                 children: [
@@ -919,8 +1764,8 @@ class _WeeklyMovieCard extends StatelessWidget {
                       child: ElevatedButton(
                         onPressed: () => context.push('/add-movie'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.lightSecondary,
-                          foregroundColor: AppTheme.lightOnPrimary,
+                          backgroundColor: theme.colorScheme.secondary,
+                          foregroundColor: theme.colorScheme.onSecondary,
                         ),
                         child: const Text('Pick Movie'),
                       ),
@@ -930,8 +1775,8 @@ class _WeeklyMovieCard extends StatelessWidget {
                     child: OutlinedButton(
                       onPressed: () => context.push('/movies'),
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppTheme.lightPrimary),
-                        foregroundColor: AppTheme.lightPrimary,
+                        side: BorderSide(color: theme.colorScheme.primary),
+                        foregroundColor: theme.colorScheme.primary,
                       ),
                       child: const Text('View Picks'),
                     ),
@@ -941,6 +1786,82 @@ class _WeeklyMovieCard extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _WeeklyTvCard extends StatelessWidget {
+  final List<Episode> episodes;
+
+  const _WeeklyTvCard({required this.episodes});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryText = AppTheme.lightPrimaryText;
+    final secondaryText = AppTheme.lightSecondaryText;
+    final hasEpisode = episodes.isNotEmpty;
+    final currentEpisode = hasEpisode ? episodes.first : null;
+
+    return Container(
+      padding: const EdgeInsets.all(AppTheme.spacingLg),
+      decoration:
+          _featureCardDecoration(context, tint: theme.colorScheme.primary),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "This Week's Episode",
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: primaryText,
+                ),
+          ),
+          const SizedBox(height: AppTheme.spacingSm),
+          Text(
+            hasEpisode
+                ? "Your crew picked: ${currentEpisode!.showTitle}"
+                : "You haven't picked a show yet",
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: secondaryText,
+                ),
+          ),
+          if (hasEpisode) ...[
+            const SizedBox(height: AppTheme.spacingMd),
+            _ThisWeekEpisodeCard(
+              episode: currentEpisode!,
+              onOpen: () => context.push('/playlist'),
+            ),
+          ],
+          const SizedBox(height: AppTheme.spacingMd),
+          Row(
+            children: [
+              if (!hasEpisode)
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => context.push('/add-tv'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.secondary,
+                      foregroundColor: theme.colorScheme.onSecondary,
+                    ),
+                    child: const Text('Pick Show'),
+                  ),
+                ),
+              if (!hasEpisode) const SizedBox(width: AppTheme.spacingMd),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => context.push('/playlist'),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: theme.colorScheme.primary),
+                    foregroundColor: theme.colorScheme.primary,
+                  ),
+                  child: Text(hasEpisode ? 'Open' : 'View Picks'),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -957,16 +1878,15 @@ class _DecadeLeaderboardCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryText = AppTheme.lightPrimaryText;
+    final secondaryText = AppTheme.lightSecondaryText;
     final firestoreService = FirestoreService();
 
     return Container(
       padding: const EdgeInsets.all(AppTheme.spacingLg),
-      decoration: BoxDecoration(
-        color: AppTheme.lightBackground,
-        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-        border: Border.all(color: AppTheme.lightOnSurface, width: 3),
-        boxShadow: AppTheme.shadowMd,
-      ),
+      decoration:
+          _featureCardDecoration(context, tint: theme.colorScheme.secondary),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -974,7 +1894,7 @@ class _DecadeLeaderboardCard extends StatelessWidget {
             "Decade Race (${decadeStart}s)",
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w800,
-                  color: AppTheme.lightPrimaryText,
+                  color: primaryText,
                 ),
           ),
           const SizedBox(height: AppTheme.spacingSm),
@@ -986,7 +1906,7 @@ class _DecadeLeaderboardCard extends StatelessWidget {
               return Text(
                 "Last decade winner (${winner.decadeStart}s): ${winner.displayName} (${winner.points} pts)",
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppTheme.lightSecondaryText,
+                      color: secondaryText,
                       fontWeight: FontWeight.w600,
                     ),
               );
@@ -1006,7 +1926,7 @@ class _DecadeLeaderboardCard extends StatelessWidget {
                 return Text(
                   "No decade points yet. Take this week's quiz to start.",
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppTheme.lightSecondaryText,
+                        color: secondaryText,
                       ),
                 );
               }
@@ -1019,19 +1939,25 @@ class _DecadeLeaderboardCard extends StatelessWidget {
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                     leading: Text('#$rank',
-                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800, color: primaryText)),
                     title: Text(
                       score.displayName,
+                      style: TextStyle(color: primaryText),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Text(
                       "${score.weeklyWins} weekly wins • ${score.weeksPlayed} weeks",
-                      style: Theme.of(context).textTheme.bodySmall,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: secondaryText),
                     ),
                     trailing: Text(
                       "${score.points}",
-                      style: const TextStyle(fontWeight: FontWeight.w800),
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800, color: primaryText),
                     ),
                   );
                 }).toList(),
@@ -1118,8 +2044,7 @@ class _MagicActionsSection extends StatelessWidget {
             _MagicActionCard(
               icon: Icons.auto_awesome_rounded,
               title: 'Need help remembering?',
-              subtitle:
-                  'Ask the Nostalgia Assistant (AI) about $year.',
+              subtitle: 'Ask the Nostalgia Assistant (AI) about $year.',
               backgroundColor: AppTheme.lightSecondary,
               borderColor: const Color(0xFF1E7066),
               foregroundColor: AppTheme.lightOnPrimary,
@@ -1284,6 +2209,11 @@ class _ThisWeekEpisodeCardState extends State<_ThisWeekEpisodeCard> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryText = AppTheme.lightPrimaryText;
+    final secondaryText = AppTheme.lightSecondaryText;
+    final panelSurface = theme.colorScheme.surface;
+    final panelBorder = theme.dividerColor;
     final provider = context.watch<NostalgiaProvider>();
     final currentUid = provider.currentUserId;
     final canDelete = widget.episode.addedByUid == currentUid;
@@ -1293,9 +2223,9 @@ class _ThisWeekEpisodeCardState extends State<_ThisWeekEpisodeCard> {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.lightSurface,
+        color: panelSurface,
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: AppTheme.lightDivider, width: 2),
+        border: Border.all(color: panelBorder, width: 2),
       ),
       child: Column(
         children: [
@@ -1315,17 +2245,17 @@ class _ThisWeekEpisodeCardState extends State<_ThisWeekEpisodeCard> {
                         errorBuilder: (_, __, ___) => Container(
                           width: 100,
                           height: 75,
-                          color: AppTheme.lightPrimary,
-                          child: const Icon(Icons.tv,
-                              color: AppTheme.lightOnPrimary),
+                          color: theme.colorScheme.secondary,
+                          child: Icon(Icons.tv,
+                              color: theme.colorScheme.onSecondary),
                         ),
                       )
                     : Container(
                         width: 100,
                         height: 75,
-                        color: AppTheme.lightPrimary,
-                        child: const Icon(Icons.tv,
-                            color: AppTheme.lightOnPrimary),
+                        color: theme.colorScheme.secondary,
+                        child: Icon(Icons.tv,
+                            color: theme.colorScheme.onSecondary),
                       ),
               ),
               Expanded(
@@ -1338,7 +2268,7 @@ class _ThisWeekEpisodeCardState extends State<_ThisWeekEpisodeCard> {
                         widget.episode.showTitle,
                         style: Theme.of(context).textTheme.labelLarge?.copyWith(
                               fontWeight: FontWeight.w800,
-                              color: AppTheme.lightPrimaryText,
+                              color: primaryText,
                             ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -1346,7 +2276,7 @@ class _ThisWeekEpisodeCardState extends State<_ThisWeekEpisodeCard> {
                       Text(
                         widget.episode.episodeTitle,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppTheme.lightSecondaryText,
+                              color: secondaryText,
                             ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -1360,8 +2290,8 @@ class _ThisWeekEpisodeCardState extends State<_ThisWeekEpisodeCard> {
                 child: ElevatedButton(
                   onPressed: widget.onOpen,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.lightPrimary,
-                    foregroundColor: AppTheme.lightOnPrimary,
+                    backgroundColor: theme.colorScheme.secondary,
+                    foregroundColor: theme.colorScheme.onSecondary,
                     padding:
                         const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
@@ -1371,7 +2301,7 @@ class _ThisWeekEpisodeCardState extends State<_ThisWeekEpisodeCard> {
             ],
           ),
           if (canDelete) ...[
-            const Divider(height: 1, color: AppTheme.lightDivider),
+            Divider(height: 1, color: panelBorder),
             Padding(
               padding: const EdgeInsets.symmetric(
                   horizontal: AppTheme.spacingSm, vertical: AppTheme.spacingXs),
@@ -1383,7 +2313,7 @@ class _ThisWeekEpisodeCardState extends State<_ThisWeekEpisodeCard> {
                     icon: const Icon(Icons.swap_horiz, size: 16),
                     label: const Text("Replace"),
                     style: TextButton.styleFrom(
-                      foregroundColor: AppTheme.lightSecondary,
+                      foregroundColor: theme.colorScheme.secondary,
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 4),
                     ),
@@ -1529,14 +2459,14 @@ class _GroupChatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryText = AppTheme.lightPrimaryText;
+    final secondaryText = AppTheme.lightSecondaryText;
+
     return Container(
       padding: const EdgeInsets.all(AppTheme.spacingLg),
-      decoration: BoxDecoration(
-        color: AppTheme.lightBackground,
-        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-        border: Border.all(color: AppTheme.lightOnSurface, width: 3),
-        boxShadow: AppTheme.shadowMd,
-      ),
+      decoration:
+          _featureCardDecoration(context, tint: theme.colorScheme.tertiary),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1547,7 +2477,7 @@ class _GroupChatCard extends StatelessWidget {
                 "Crew Chat",
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w800,
-                      color: AppTheme.lightPrimaryText,
+                      color: primaryText,
                     ),
               ),
               OutlinedButton.icon(
@@ -1555,8 +2485,8 @@ class _GroupChatCard extends StatelessWidget {
                 icon: const Icon(Icons.chat_rounded, size: 16),
                 label: const Text("Open"),
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppTheme.lightSecondary),
-                  foregroundColor: AppTheme.lightSecondary,
+                  side: BorderSide(color: theme.colorScheme.secondary),
+                  foregroundColor: theme.colorScheme.secondary,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
@@ -1585,7 +2515,7 @@ class _GroupChatCard extends StatelessWidget {
                     child: Text(
                       "Say hello to the crew…",
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppTheme.lightSecondaryText,
+                            color: secondaryText,
                             fontStyle: FontStyle.italic,
                           ),
                     ),
@@ -1614,7 +2544,7 @@ class _GroupChatCard extends StatelessWidget {
                                 .labelSmall
                                 ?.copyWith(
                                   fontWeight: FontWeight.w700,
-                                  color: AppTheme.lightPrimary,
+                                  color: theme.colorScheme.primary,
                                 ),
                           ),
                           const SizedBox(height: 2),
@@ -1622,7 +2552,7 @@ class _GroupChatCard extends StatelessWidget {
                             message.text,
                             style:
                                 Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: AppTheme.lightPrimaryText,
+                                      color: primaryText,
                                     ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -1641,26 +2571,27 @@ class _GroupChatCard extends StatelessWidget {
               Expanded(
                 child: TextField(
                   controller: chatController,
-                  style: const TextStyle(color: AppTheme.lightPrimaryText),
-                  cursorColor: AppTheme.lightPrimaryText,
+                  style: TextStyle(color: primaryText),
+                  cursorColor: primaryText,
                   decoration: InputDecoration(
+                    filled: true,
+                    fillColor: AppTheme.lightSurface,
                     hintText: 'Type a message...',
-                    hintStyle:
-                        const TextStyle(color: AppTheme.lightSecondaryText),
+                    hintStyle: TextStyle(color: secondaryText),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                      borderSide: const BorderSide(
-                          color: AppTheme.lightDivider, width: 2),
+                      borderSide:
+                          BorderSide(color: theme.dividerColor, width: 2),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                      borderSide: const BorderSide(
-                          color: AppTheme.lightDivider, width: 2),
+                      borderSide:
+                          BorderSide(color: theme.dividerColor, width: 2),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                      borderSide: const BorderSide(
-                          color: AppTheme.lightSecondary, width: 2),
+                      borderSide: BorderSide(
+                          color: theme.colorScheme.secondary, width: 2),
                     ),
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: AppTheme.spacingMd,
@@ -1677,29 +2608,29 @@ class _GroupChatCard extends StatelessWidget {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: isSending
-                        ? AppTheme.lightDivider
-                        : AppTheme.lightSecondary,
+                        ? theme.dividerColor
+                        : theme.colorScheme.secondary,
                     borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                     border: Border.all(
                       color: isSending
-                          ? AppTheme.lightDivider
-                          : const Color(0xFF1E7066),
+                          ? theme.dividerColor
+                          : theme.colorScheme.secondary,
                       width: 2,
                     ),
                   ),
                   child: isSending
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             valueColor: AlwaysStoppedAnimation<Color>(
-                                AppTheme.lightOnPrimary),
+                                theme.colorScheme.onSecondary),
                           ),
                         )
-                      : const Icon(
+                      : Icon(
                           Icons.send_rounded,
-                          color: AppTheme.lightOnPrimary,
+                          color: theme.colorScheme.onSecondary,
                           size: 20,
                         ),
                 ),

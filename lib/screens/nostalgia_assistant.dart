@@ -28,6 +28,34 @@ class _NostalgiaAssistantScreenState extends State<NostalgiaAssistantScreen> {
   List<ChatMessage> _messages = [];
   bool _isInitializing = true;
   bool _isSending = false;
+  static const Map<int, String> _yearTrivia = {
+    1980: 'Pac-Man became a global arcade phenomenon in 1980.',
+    1981: 'MTV launched in 1981 and quickly reshaped music culture.',
+    1982: 'Michael Jackson released "Thriller" in 1982.',
+    1983: 'CDs started gaining mainstream traction in 1983.',
+    1984: '"Like a Virgin" helped define pop music in 1984.',
+    1985: 'Live Aid took place in 1985 with globally watched performances.',
+    1986: 'Top Gun helped soundtrack-driven pop culture explode in 1986.',
+    1987: 'Synth-pop and stadium rock were dominant in 1987 charts.',
+    1988: 'The late 80s saw hip-hop become more mainstream by 1988.',
+    1989: 'Nintendo Game Boy launched in 1989.',
+    1990: '90s pop and alternative sounds started breaking through in 1990.',
+    1991: 'Nirvana\'s "Nevermind" arrived in 1991 and changed rock radio.',
+    1992: 'The Bodyguard soundtrack became one of the era\'s biggest sellers.',
+    1993: '"Jurassic Park" was one of 1993\'s defining blockbusters.',
+    1994: '"The Lion King" was the highest-grossing film of 1994.',
+    1995: 'The Sony PlayStation launched in North America in 1995.',
+    1996: 'The Spice Girls\' "Wannabe" became a global pop anthem in 1996.',
+    1997: '"Titanic" became a major global phenomenon in 1997.',
+    1998: 'Britney Spears\' "...Baby One More Time" debuted in 1998.',
+    1999: 'The Y2K era heavily shaped late-90s pop culture in 1999.',
+    2000: 'The new millennium accelerated digital music adoption in 2000.',
+  };
+
+  String _triviaForYear(int year) {
+    return _yearTrivia[year] ??
+        'Every region had different chart leaders in $year. Ask for US or UK top songs, TV hits, or major pop-culture moments.';
+  }
 
   @override
   void initState() {
@@ -183,6 +211,8 @@ class _NostalgiaAssistantScreenState extends State<NostalgiaAssistantScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final group = context.watch<NostalgiaProvider>().currentGroup;
     final year = group?.currentYear ?? 1990;
 
@@ -230,8 +260,8 @@ class _NostalgiaAssistantScreenState extends State<NostalgiaAssistantScreen> {
                       padding: const EdgeInsets.all(AppTheme.spacingLg),
                       children: [
                         _TriviaCard(
-                          fact:
-                              "The Lion King was the highest-grossing film of $year, and the Sony PlayStation was first released in Japan!",
+                          year: year,
+                          fact: _triviaForYear(year),
                         ),
                         ..._messages.map((msg) => _ChatBubble(
                               message: msg,
@@ -301,14 +331,14 @@ class _NostalgiaAssistantScreenState extends State<NostalgiaAssistantScreen> {
                   // Input Area
                   Container(
                     padding: const EdgeInsets.all(AppTheme.spacingLg),
-                    decoration: const BoxDecoration(
-                      color: AppTheme.lightSurface,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
                       borderRadius: BorderRadius.only(
                           topLeft: Radius.circular(24),
                           topRight: Radius.circular(24)),
                       border: Border(
                           top: BorderSide(
-                              color: AppTheme.lightDivider, width: 3)),
+                              color: theme.dividerColor, width: 3)),
                     ),
                     child: Row(
                       children: [
@@ -317,29 +347,37 @@ class _NostalgiaAssistantScreenState extends State<NostalgiaAssistantScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: AppTheme.spacingMd),
                             decoration: BoxDecoration(
-                              color: AppTheme.lightBackground,
+                              color: theme.scaffoldBackgroundColor,
                               borderRadius:
                                   BorderRadius.circular(AppTheme.radiusMd),
                               border: Border.all(
-                                  color: AppTheme.lightDivider, width: 2),
+                                  color: theme.dividerColor, width: 2),
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.psychology,
-                                    color: AppTheme.lightSecondaryText,
+                                Icon(Icons.psychology,
+                                    color: isDark
+                                        ? AppTheme.darkSecondaryText
+                                        : AppTheme.lightSecondaryText,
                                     size: 20),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: TextField(
                                     controller: _controller,
                                     enabled: !_isSending,
-                                    style: const TextStyle(
-                                        color: AppTheme.lightPrimaryText),
-                                    cursorColor: AppTheme.lightPrimaryText,
+                                    style: TextStyle(
+                                        color: isDark
+                                            ? AppTheme.darkPrimaryText
+                                            : AppTheme.lightPrimaryText),
+                                    cursorColor: isDark
+                                        ? AppTheme.darkPrimaryText
+                                        : AppTheme.lightPrimaryText,
                                     decoration: InputDecoration(
                                       hintText: "Ask about $year...",
-                                      hintStyle: const TextStyle(
-                                          color: AppTheme.lightSecondaryText),
+                                      hintStyle: TextStyle(
+                                          color: isDark
+                                              ? AppTheme.darkSecondaryText
+                                              : AppTheme.lightSecondaryText),
                                       border: InputBorder.none,
                                       enabledBorder: InputBorder.none,
                                       focusedBorder: InputBorder.none,
@@ -495,9 +533,10 @@ class _ChatBubble extends StatelessWidget {
 }
 
 class _TriviaCard extends StatelessWidget {
+  final int year;
   final String fact;
 
-  const _TriviaCard({required this.fact});
+  const _TriviaCard({required this.year, required this.fact});
 
   @override
   Widget build(BuildContext context) {
@@ -518,7 +557,7 @@ class _TriviaCard extends StatelessWidget {
                   color: AppTheme.lightAccent, size: 20),
               const SizedBox(width: 8),
               Text(
-                "Did you know? - 1994",
+                "Did you know? - $year",
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: AppTheme.lightOnSurface,

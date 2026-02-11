@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:go_router/go_router.dart';
 import 'firebase_options.dart';
 import 'theme.dart';
 import 'nav.dart';
 import 'state.dart';
 import 'services/youtube_service.dart';
 import 'config/youtube_config.dart';
+import 'services/playback_service.dart';
+import 'components/persistent_playback_host.dart';
 
 const bool _enableAppCheck =
     bool.fromEnvironment('ENABLE_APP_CHECK', defaultValue: false);
@@ -39,18 +42,42 @@ class NostalgiaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => NostalgiaProvider()..initialize(),
-      child: Consumer<NostalgiaProvider>(
-        builder: (context, provider, _) => MaterialApp.router(
-          title: 'Nostalgia Time Machine',
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
-          themeMode: provider.themeMode,
-          routerConfig: AppRouter.createRouter(provider),
-        ),
-      ),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => NostalgiaProvider()..initialize()),
+        ChangeNotifierProvider(create: (_) => PlaybackService()),
+      ],
+      child: const _NostalgiaAppShell(),
+    );
+  }
+}
+
+class _NostalgiaAppShell extends StatefulWidget {
+  const _NostalgiaAppShell();
+
+  @override
+  State<_NostalgiaAppShell> createState() => _NostalgiaAppShellState();
+}
+
+class _NostalgiaAppShellState extends State<_NostalgiaAppShell> {
+  GoRouter? _router;
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<NostalgiaProvider>();
+    _router ??= AppRouter.createRouter(provider);
+
+    return MaterialApp.router(
+      title: 'Nostalgia Time Machine',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: provider.themeMode,
+      routerConfig: _router!,
+      builder: (context, child) {
+        if (child == null) return const SizedBox.shrink();
+        return PersistentPlaybackHost(child: child);
+      },
     );
   }
 }

@@ -48,6 +48,28 @@ class AuthService {
     }
   }
 
+  Future<User?> signInWithEmailAndPassword(String email, String password) async {
+    try {
+      final cred = await _auth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+      return cred.user;
+    } catch (e) {
+      debugPrint('❌ Email sign-in failed: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+    } catch (e) {
+      debugPrint('❌ Password reset email failed: $e');
+      rethrow;
+    }
+  }
+
   Future<void> sendEmailVerification() async {
     await _auth.currentUser?.sendEmailVerification();
   }

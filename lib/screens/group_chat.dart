@@ -77,6 +77,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final provider = context.watch<NostalgiaProvider>();
     final group = provider.currentGroup;
     final currentUserId = provider.currentUserId;
@@ -177,12 +178,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   Expanded(
                     child: TextField(
                       controller: _messageController,
-                      style: const TextStyle(color: AppTheme.lightPrimaryText),
-                      cursorColor: AppTheme.lightPrimaryText,
+                      style: TextStyle(color: theme.colorScheme.onSurface),
+                      cursorColor: theme.colorScheme.onSurface,
                       decoration: InputDecoration(
                         hintText: 'Type a message...',
                         hintStyle:
-                            const TextStyle(color: AppTheme.lightSecondaryText),
+                            TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.65)),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: AppTheme.spacingMd,
                           vertical: AppTheme.spacingMd,

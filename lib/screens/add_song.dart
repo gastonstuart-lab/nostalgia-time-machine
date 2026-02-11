@@ -21,6 +21,7 @@ class _AddSongScreenState extends State<AddSongScreen> {
   List<YouTubeSearchResult> _results = [];
   bool _isSearching = false;
   String? _errorMessage;
+  int _suggestionRotation = 0;
 
   int _getUserSongCount(NostalgiaProvider provider) {
     final uid = provider.currentUserProfile?.uid;
@@ -32,8 +33,8 @@ class _AddSongScreenState extends State<AddSongScreen> {
     return provider.currentGroup?.songCapPerUser ?? 7;
   }
 
-  Future<void> _search() async {
-    final query = _searchController.text.trim();
+  Future<void> _search([String? queryOverride]) async {
+    final query = (queryOverride ?? _searchController.text).trim();
     if (query.isEmpty) return;
 
     setState(() {
@@ -42,7 +43,11 @@ class _AddSongScreenState extends State<AddSongScreen> {
     });
 
     try {
-      final results = await _youtubeService.searchVideos(query, maxResults: 10);
+      final results = await _youtubeService.searchVideos(
+        query,
+        maxResults: 10,
+        videoCategoryId: '10',
+      );
       if (mounted) {
         setState(() {
           _results = results;
@@ -59,6 +64,77 @@ class _AddSongScreenState extends State<AddSongScreen> {
         });
       }
     }
+  }
+
+  List<String> _suggestionPoolForYear(int year) {
+    if (year < 1980) {
+      return [
+        'Classic Rock',
+        'Motown Soul',
+        'Disco Dance',
+        'Funk Grooves',
+        'Singer Songwriter',
+        'Psychedelic Rock',
+      ];
+    }
+    if (year < 1990) {
+      return [
+        'Synth Pop',
+        'New Wave',
+        'Hair Metal',
+        'Early Hip Hop',
+        'Power Ballads',
+        'Dance Pop',
+      ];
+    }
+    if (year < 2000) {
+      return [
+        'Grunge Anthems',
+        'Eurodance Hits',
+        'West Coast Rap',
+        'R&B Classics',
+        'Britpop',
+        'Pop Punk',
+      ];
+    }
+    if (year < 2010) {
+      return [
+        'Y2K Pop',
+        'Emo Rock',
+        'Crunk Party',
+        'Indie Rock',
+        'Neptunes Era',
+        'Garage Rock Revival',
+      ];
+    }
+    return [
+      'EDM Bangers',
+      'Indie Pop',
+      'Trap Anthems',
+      'K-Pop Hits',
+      'Bedroom Pop',
+      'Afrobeats',
+    ];
+  }
+
+  List<String> _visibleSuggestionsForYear(int year) {
+    final pool = _suggestionPoolForYear(year);
+    if (pool.length <= 4) return pool;
+    final start = (_suggestionRotation * 4) % pool.length;
+    final rotated = [...pool.sublist(start), ...pool.sublist(0, start)];
+    return rotated.take(4).toList();
+  }
+
+  void _refreshSuggestions() {
+    setState(() {
+      _suggestionRotation++;
+    });
+  }
+
+  void _handleSuggestionTap(String label, int year) {
+    final query = '$label $year songs';
+    _searchController.text = query;
+    _search(query);
   }
 
   Future<void> _addSongFromSearch(YouTubeSearchResult result) async {
@@ -140,6 +216,7 @@ class _AddSongScreenState extends State<AddSongScreen> {
     final userSongCount = _getUserSongCount(provider);
     final songCap = _getSongCap(provider);
     final year = group?.currentYear ?? 1990;
+    final aiSuggestions = _visibleSuggestionsForYear(year);
 
     return Scaffold(
       backgroundColor: AppTheme.lightBackground,
@@ -325,25 +402,28 @@ class _AddSongScreenState extends State<AddSongScreen> {
                                         fontWeight: FontWeight.w800)),
                           ],
                         ),
-                        Text("REFRESH",
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelSmall
-                                ?.copyWith(
-                                    color: AppTheme.lightSecondary,
-                                    fontWeight: FontWeight.w700)),
+                        GestureDetector(
+                          onTap: _refreshSuggestions,
+                          child: Text("REFRESH",
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelSmall
+                                  ?.copyWith(
+                                      color: AppTheme.lightSecondary,
+                                      fontWeight: FontWeight.w700)),
+                        ),
                       ],
                     ),
                     const SizedBox(height: AppTheme.spacingSm),
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
-                        children: [
-                          _AIChip(label: "Grunge Anthems"),
-                          _AIChip(label: "Eurodance Hits"),
-                          _AIChip(label: "West Coast Rap"),
-                          _AIChip(label: "R&B Classics"),
-                        ],
+                        children: aiSuggestions
+                            .map((label) => _AIChip(
+                                  label: label,
+                                  onTap: () => _handleSuggestionTap(label, year),
+                                ))
+                            .toList(),
                       ),
                     ),
 
@@ -409,28 +489,34 @@ class _AddSongScreenState extends State<AddSongScreen> {
 
 class _AIChip extends StatelessWidget {
   final String label;
+  final VoidCallback onTap;
 
-  const _AIChip({required this.label});
+  const _AIChip({required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(right: AppTheme.spacingSm),
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppTheme.spacingMd, vertical: AppTheme.spacingSm),
-      decoration: BoxDecoration(
-        color: AppTheme.lightBackground,
-        borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-        border: Border.all(color: AppTheme.lightAccent, width: 2),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.auto_awesome, size: 14, color: AppTheme.lightAccent),
-          const SizedBox(width: 4),
-          Text(label,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: AppTheme.lightOnSurface, fontWeight: FontWeight.w700)),
-        ],
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(right: AppTheme.spacingSm),
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppTheme.spacingMd, vertical: AppTheme.spacingSm),
+        decoration: BoxDecoration(
+          color: AppTheme.lightBackground,
+          borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+          border: Border.all(color: AppTheme.lightAccent, width: 2),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.auto_awesome,
+                size: 14, color: AppTheme.lightAccent),
+            const SizedBox(width: 4),
+            Text(label,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: AppTheme.lightOnSurface,
+                    fontWeight: FontWeight.w700)),
+          ],
+        ),
       ),
     );
   }

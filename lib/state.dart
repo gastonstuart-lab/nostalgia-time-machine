@@ -27,13 +27,13 @@ class NostalgiaProvider extends ChangeNotifier {
   StreamSubscription? _authSubscription;
   Timer? _splashTimer;
   DateTime? _splashStartedAt;
-  static const Duration _minSplashDuration = Duration(milliseconds: 1400);
+  static const Duration _minSplashDuration = Duration(seconds: 5);
   bool _authResolved = false;
 
   bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
 
-  ThemeMode _themeMode = ThemeMode.light;
+  ThemeMode _themeMode = ThemeMode.dark;
   ThemeMode get themeMode => _themeMode;
 
   UserProfile? get currentUserProfile => _currentUserProfile;
@@ -166,6 +166,16 @@ class NostalgiaProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> signInWithEmail(String email, String password) async {
+    await _authService.signInWithEmailAndPassword(email, password);
+    await _handleAuthChanged();
+    notifyListeners();
+  }
+
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _authService.sendPasswordResetEmail(email);
+  }
+
   Future<void> resendVerificationEmail() async {
     await _authService.sendEmailVerification();
   }
@@ -188,7 +198,7 @@ class NostalgiaProvider extends ChangeNotifier {
   Future<void> _loadThemePreference() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final isDark = prefs.getBool('isDarkMode') ?? false;
+      final isDark = prefs.getBool('isDarkMode') ?? true;
       _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
       debugPrint('✅ Loaded theme preference: $_themeMode');
     } catch (e) {

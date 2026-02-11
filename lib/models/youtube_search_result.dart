@@ -1,3 +1,5 @@
+import '../utils/text_sanitizer.dart';
+
 class YouTubeSearchResult {
   final String videoId;
   final String title;
@@ -21,8 +23,9 @@ class YouTubeSearchResult {
     
     return YouTubeSearchResult(
       videoId: videoId,
-      title: snippet['title'] ?? '',
-      channelTitle: snippet['channelTitle'] ?? '',
+      title: decodeHtmlEntities((snippet['title'] ?? '').toString()),
+      channelTitle:
+          decodeHtmlEntities((snippet['channelTitle'] ?? '').toString()),
       thumbnailUrl: thumbnail['url'] ?? '',
     );
   }

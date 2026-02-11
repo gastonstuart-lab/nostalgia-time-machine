@@ -330,29 +330,39 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                       const SizedBox(height: AppTheme.spacingMd),
                       DropdownButtonFormField<String>(
                         value: quizDifficulty,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Quiz Difficulty',
+                          labelStyle: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                          filled: true,
+                          fillColor: Theme.of(context).colorScheme.surface,
                         ),
-                        style:
-                            const TextStyle(color: AppTheme.lightPrimaryText),
-                        dropdownColor: AppTheme.lightSurface,
-                        iconEnabledColor: AppTheme.lightPrimaryText,
-                        items: const [
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        dropdownColor: Theme.of(context).colorScheme.surface,
+                        iconEnabledColor: Theme.of(context).colorScheme.onSurface,
+                        items: [
                           DropdownMenuItem(
                               value: 'easy',
                               child: Text('Easy',
                                   style: TextStyle(
-                                      color: AppTheme.lightPrimaryText))),
+                                      color:
+                                          Theme.of(context).colorScheme.onSurface))),
                           DropdownMenuItem(
                               value: 'medium',
                               child: Text('Medium',
                                   style: TextStyle(
-                                      color: AppTheme.lightPrimaryText))),
+                                      color:
+                                          Theme.of(context).colorScheme.onSurface))),
                           DropdownMenuItem(
                               value: 'hard',
                               child: Text('Hard',
                                   style: TextStyle(
-                                      color: AppTheme.lightPrimaryText))),
+                                      color:
+                                          Theme.of(context).colorScheme.onSurface))),
                         ],
                         onChanged: (value) {
                           if (value == null) return;
