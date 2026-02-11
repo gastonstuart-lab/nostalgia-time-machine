@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../models/year_news.dart';
 import '../screens/story_detail_page.dart';
@@ -34,22 +35,36 @@ class _YearNewsSectionState extends State<YearNewsSection> {
     'Dec',
   ];
 
-  final PageController _heroController = PageController();
+  final ScrollController _monthRailController = ScrollController();
   Timer? _heroTimer;
   Timer? _resumeAutoTimer;
+  Timer? _monthRailTimer;
+  Timer? _monthRailResumeTimer;
   int _selectedMonth = 1;
   int _heroIndex = 0;
   bool _isUserInteracting = false;
+  bool _isMonthRailInteracting = false;
 
   List<YearNewsItem> get _heroItems => widget.package.hero;
   List<YearNewsItem> get _storiesForSelectedMonth =>
       widget.package.storiesForMonth(_selectedMonth);
+  List<YearNewsItem> get _storiesForRail {
+    final stories = _storiesForSelectedMonth;
+    if (stories.length <= 1) {
+      return stories;
+    }
+    return [...stories, ...stories, ...stories];
+  }
 
   @override
   void initState() {
     super.initState();
     _selectedMonth = _initialMonth();
     _startAutoAdvance();
+    _startMonthRailAutoScroll();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _resetMonthRailPosition();
+    });
   }
 
   @override
@@ -58,7 +73,9 @@ class _YearNewsSectionState extends State<YearNewsSection> {
     if (oldWidget.package.year != widget.package.year) {
       _selectedMonth = _initialMonth();
       _heroIndex = 0;
-      _heroController.jumpToPage(0);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _resetMonthRailPosition();
+      });
     }
   }
 
@@ -90,19 +107,26 @@ class _YearNewsSectionState extends State<YearNewsSection> {
   void _startAutoAdvance() {
     _heroTimer?.cancel();
     _heroTimer = Timer.periodic(const Duration(seconds: 7), (_) {
-      if (!mounted ||
-          _isUserInteracting ||
-          _heroItems.length < 2 ||
-          !_heroController.hasClients) {
+      if (!mounted || _isUserInteracting || _heroItems.length < 2) {
         return;
       }
+      setState(() {
+        _heroIndex = (_heroIndex + 1) % _heroItems.length;
+      });
+    });
+  }
 
-      final nextPage = (_heroIndex + 1) % _heroItems.length;
-      _heroController.animateToPage(
-        nextPage,
-        duration: const Duration(milliseconds: 650),
-        curve: Curves.easeOutCubic,
-      );
+  void _previousHero() {
+    if (_heroItems.length < 2) return;
+    setState(() {
+      _heroIndex = (_heroIndex - 1 + _heroItems.length) % _heroItems.length;
+    });
+  }
+
+  void _nextHero() {
+    if (_heroItems.length < 2) return;
+    setState(() {
+      _heroIndex = (_heroIndex + 1) % _heroItems.length;
     });
   }
 
@@ -122,11 +146,64 @@ class _YearNewsSectionState extends State<YearNewsSection> {
     });
   }
 
+  void _startMonthRailAutoScroll() {
+    _monthRailTimer?.cancel();
+    _monthRailTimer = Timer.periodic(const Duration(milliseconds: 32), (_) {
+      if (!mounted ||
+          _isMonthRailInteracting ||
+          !_monthRailController.hasClients ||
+          _storiesForSelectedMonth.length < 2) {
+        return;
+      }
+      final position = _monthRailController.position;
+      if (position.maxScrollExtent <= 0) return;
+
+      final segment = position.maxScrollExtent / 3;
+      final loopStart = segment;
+      final loopEnd = segment * 2;
+      final next = position.pixels + 0.55;
+      if (next >= loopEnd) {
+        _monthRailController.jumpTo(loopStart);
+      } else {
+        _monthRailController.jumpTo(next);
+      }
+    });
+  }
+
+  void _resetMonthRailPosition() {
+    if (!_monthRailController.hasClients) return;
+    if (_storiesForSelectedMonth.length < 2) {
+      _monthRailController.jumpTo(0);
+      return;
+    }
+    final maxExtent = _monthRailController.position.maxScrollExtent;
+    if (maxExtent <= 0) return;
+    _monthRailController.jumpTo(maxExtent / 3);
+  }
+
+  void _onMonthRailInteractionStart() {
+    _monthRailResumeTimer?.cancel();
+    if (!_isMonthRailInteracting) {
+      setState(() => _isMonthRailInteracting = true);
+    }
+  }
+
+  void _onMonthRailInteractionEnd() {
+    _monthRailResumeTimer?.cancel();
+    _monthRailResumeTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted) {
+        setState(() => _isMonthRailInteracting = false);
+      }
+    });
+  }
+
   @override
   void dispose() {
     _heroTimer?.cancel();
     _resumeAutoTimer?.cancel();
-    _heroController.dispose();
+    _monthRailTimer?.cancel();
+    _monthRailResumeTimer?.cancel();
+    _monthRailController.dispose();
     super.dispose();
   }
 
@@ -204,23 +281,34 @@ class _YearNewsSectionState extends State<YearNewsSection> {
             child: Listener(
               onPointerDown: (_) => _onUserInteractionStart(),
               onPointerUp: (_) => _onUserInteractionEnd(),
-              child: PageView.builder(
-                controller: _heroController,
-                itemCount: _heroItems.isEmpty ? 1 : _heroItems.length,
-                onPageChanged: (index) {
-                  setState(() => _heroIndex = index);
-                },
-                itemBuilder: (context, index) {
-                  if (_heroItems.isEmpty) {
-                    return const _HeroPlaceholderCard();
+              child: GestureDetector(
+                onHorizontalDragStart: (_) => _onUserInteractionStart(),
+                onHorizontalDragEnd: (details) {
+                  final velocity = details.primaryVelocity ?? 0;
+                  if (velocity < 0) {
+                    _nextHero();
+                  } else if (velocity > 0) {
+                    _previousHero();
                   }
-                  final item = _heroItems[index];
-                  return _HeroStoryCard(
-                    item: item,
-                    resolvedImageUrl: item.imageUrl,
-                    onOpen: () => _openStoryDetail(item),
-                  );
+                  _onUserInteractionEnd();
                 },
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 500),
+                  switchInCurve: Curves.easeInOut,
+                  switchOutCurve: Curves.easeInOut,
+                  transitionBuilder: (child, animation) =>
+                      FadeTransition(opacity: animation, child: child),
+                  child: _heroItems.isEmpty
+                      ? const _HeroPlaceholderCard(
+                          key: ValueKey<String>('hero_empty'),
+                        )
+                      : _HeroStoryCard(
+                          key: ValueKey<String>('hero_${_heroIndex}_card'),
+                          item: _heroItems[_heroIndex],
+                          resolvedImageUrl: _heroItems[_heroIndex].imageUrl,
+                          onOpen: () => _openStoryDetail(_heroItems[_heroIndex]),
+                        ),
+                ),
               ),
             ),
           ),
@@ -253,10 +341,15 @@ class _YearNewsSectionState extends State<YearNewsSection> {
                 final month = index + 1;
                 final selected = _selectedMonth == month;
                 return GestureDetector(
-                  onTap: () => setState(() => _selectedMonth = month),
+                  onTap: () {
+                    setState(() => _selectedMonth = month);
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      _resetMonthRailPosition();
+                    });
+                  },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOut,
+                    curve: Curves.easeInOut,
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
@@ -293,19 +386,41 @@ class _YearNewsSectionState extends State<YearNewsSection> {
             height: 220,
             child: _storiesForSelectedMonth.isEmpty
                 ? _EmptyMonthStories(monthLabel: _months[_selectedMonth - 1])
-                : ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _storiesForSelectedMonth.length,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(width: AppTheme.spacingSm),
-                    itemBuilder: (context, index) {
-                      final item = _storiesForSelectedMonth[index];
-                      return _MonthStoryCard(
-                        item: item,
-                        month: _selectedMonth,
-                        onOpen: () => _openStoryDetail(item),
-                      );
-                    },
+                : MouseRegion(
+                    onEnter: (_) => _onMonthRailInteractionStart(),
+                    onExit: (_) => _onMonthRailInteractionEnd(),
+                    child: Listener(
+                      onPointerDown: (_) => _onMonthRailInteractionStart(),
+                      onPointerUp: (_) => _onMonthRailInteractionEnd(),
+                      child: NotificationListener<UserScrollNotification>(
+                        onNotification: (notification) {
+                          if (notification.direction == ScrollDirection.idle) {
+                            _onMonthRailInteractionEnd();
+                          } else {
+                            _onMonthRailInteractionStart();
+                          }
+                          return false;
+                        },
+                        child: ListView.separated(
+                          controller: _monthRailController,
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _storiesForRail.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(width: AppTheme.spacingSm),
+                          itemBuilder: (context, index) {
+                            final sourceStories = _storiesForSelectedMonth;
+                            final item = sourceStories.isEmpty
+                                ? _storiesForRail[index]
+                                : _storiesForRail[index % sourceStories.length];
+                            return _MonthStoryCard(
+                              item: item,
+                              month: _selectedMonth,
+                              onOpen: () => _openStoryDetail(item),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
                   ),
           ),
         ],
@@ -401,29 +516,64 @@ class _YearNewsTickerState extends State<YearNewsTicker> {
   void initState() {
     super.initState();
     _startTicker();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeTickerPosition();
+    });
   }
 
   @override
   void didUpdateWidget(covariant YearNewsTicker oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.headlines != widget.headlines) {
-      _scrollController.jumpTo(0);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _initializeTickerPosition();
+      });
     }
   }
 
   void _startTicker() {
     _tickerTimer?.cancel();
-    _tickerTimer = Timer.periodic(const Duration(milliseconds: 22), (_) {
+    _tickerTimer = Timer.periodic(const Duration(milliseconds: 28), (_) {
       if (!_scrollController.hasClients) return;
       final position = _scrollController.position;
       if (position.maxScrollExtent <= 0) return;
-      final next = position.pixels + 0.8;
+
+      if (widget.headlines.length > 1) {
+        final segment = position.maxScrollExtent / 3;
+        final loopStart = segment;
+        final loopEnd = segment * 2;
+        if (position.pixels < loopStart) {
+          _scrollController.jumpTo(loopStart);
+          return;
+        }
+
+        final next = position.pixels + 0.42;
+        if (next >= loopEnd) {
+          _scrollController.jumpTo(loopStart);
+        } else {
+          _scrollController.jumpTo(next);
+        }
+        return;
+      }
+
+      final next = position.pixels + 0.42;
       if (next >= position.maxScrollExtent) {
         _scrollController.jumpTo(0);
       } else {
         _scrollController.jumpTo(next);
       }
     });
+  }
+
+  void _initializeTickerPosition() {
+    if (!_scrollController.hasClients) return;
+    final max = _scrollController.position.maxScrollExtent;
+    if (max <= 0) return;
+    if (widget.headlines.length > 1) {
+      _scrollController.jumpTo(max / 3);
+    } else {
+      _scrollController.jumpTo(0);
+    }
   }
 
   void _showHeadlinesSheet() {
@@ -509,6 +659,7 @@ class _HeroStoryCard extends StatelessWidget {
   final VoidCallback onOpen;
 
   const _HeroStoryCard({
+    super.key,
     required this.item,
     required this.resolvedImageUrl,
     required this.onOpen,
@@ -529,13 +680,25 @@ class _HeroStoryCard extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          hasImage
-              ? Image.network(
-                  resolvedImageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const _ImagePlaceholder(),
-                )
-              : const _ImagePlaceholder(),
+          TweenAnimationBuilder<double>(
+            tween: Tween<double>(begin: 1.0, end: 1.05),
+            duration: const Duration(seconds: 7),
+            curve: Curves.easeInOut,
+            builder: (context, scale, child) {
+              return Transform.scale(
+                scale: scale,
+                alignment: Alignment.center,
+                child: child,
+              );
+            },
+            child: hasImage
+                ? Image.network(
+                    resolvedImageUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const _ImagePlaceholder(),
+                  )
+                : const _ImagePlaceholder(),
+          ),
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -611,7 +774,7 @@ class _HeroStoryCard extends StatelessWidget {
 }
 
 class _HeroPlaceholderCard extends StatelessWidget {
-  const _HeroPlaceholderCard();
+  const _HeroPlaceholderCard({super.key});
 
   @override
   Widget build(BuildContext context) {
